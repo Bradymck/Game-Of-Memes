@@ -8,10 +8,11 @@ interface CardProps {
   onClick?: () => void;
   isPlayable?: boolean;
   isInHand?: boolean;
+  isSelected?: boolean;
   position?: number;
 }
 
-export default function Card({ card, onClick, isPlayable = false, isInHand = false, position = 0 }: CardProps) {
+export default function Card({ card, onClick, isPlayable = false, isInHand = false, isSelected = false, position = 0 }: CardProps) {
   const rarityColors = {
     common: 'from-gray-600 to-gray-800',
     rare: 'from-blue-600 to-blue-800',
@@ -37,7 +38,8 @@ export default function Card({ card, onClick, isPlayable = false, isInHand = fal
         relative w-32 h-48 rounded-xl overflow-hidden cursor-pointer
         bg-gradient-to-br ${rarityColors[card.rarity]}
         shadow-lg ${isPlayable ? `${rarityGlow[card.rarity]} hover:shadow-xl` : ''}
-        ${!isPlayable && 'opacity-60 cursor-not-allowed'}
+        ${!isPlayable && !isSelected && 'opacity-60 cursor-not-allowed'}
+        ${isSelected && 'ring-4 ring-yellow-400 scale-105'}
       `}
       onClick={isPlayable ? onClick : undefined}
     >
@@ -60,12 +62,14 @@ export default function Card({ card, onClick, isPlayable = false, isInHand = fal
       <div className="absolute bottom-2 left-0 right-0 flex justify-between px-3">
         {/* Attack */}
         <div className="w-7 h-7 rounded bg-red-600 flex items-center justify-center font-bold text-white text-sm shadow-md">
-          ⚔️{card.attack}
+          ⚔️{'currentAttack' in card ? card.currentAttack : card.attack}
         </div>
 
         {/* Health */}
-        <div className="w-7 h-7 rounded bg-green-600 flex items-center justify-center font-bold text-white text-sm shadow-md">
-          ❤️{card.health}
+        <div className={`w-7 h-7 rounded flex items-center justify-center font-bold text-white text-sm shadow-md ${
+          'currentHealth' in card && card.currentHealth < card.health ? 'bg-red-600' : 'bg-green-600'
+        }`}>
+          ❤️{'currentHealth' in card ? card.currentHealth : card.health}
         </div>
       </div>
 
