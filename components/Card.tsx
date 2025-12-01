@@ -48,9 +48,35 @@ export default function Card({ card, onClick, isPlayable = false, isInHand = fal
         {card.cost}
       </div>
 
-      {/* Card Image Placeholder */}
-      <div className="w-full h-24 bg-gradient-to-b from-black/40 to-transparent flex items-center justify-center">
-        <span className="text-4xl">🃏</span>
+      {/* Card Image */}
+      <div className="relative w-full h-20 overflow-hidden bg-black/20">
+        {card.imageUrl ? (
+          <>
+            <img
+              src={card.imageUrl}
+              alt={card.name}
+              className="absolute inset-0 w-full h-full object-cover"
+            />
+            {/* Gradient overlay */}
+            <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-black/60" />
+          </>
+        ) : (
+          <div className="absolute inset-0 flex items-center justify-center text-4xl opacity-70 bg-gradient-to-b from-black/40 to-black/20">
+            🃏
+          </div>
+        )}
+
+        {/* Market change indicator */}
+        {card.marketData && (
+          <div className={`absolute top-1 right-1 px-1.5 py-0.5 rounded text-[9px] font-bold shadow-lg z-10 ${
+            card.marketData.priceChange24h >= 0
+              ? 'bg-green-500 text-white'
+              : 'bg-red-500 text-white'
+          }`}>
+            {card.marketData.priceChange24h >= 0 ? '↗' : '↘'}
+            {Math.abs(card.marketData.priceChange24h).toFixed(1)}%
+          </div>
+        )}
       </div>
 
       {/* Card Name */}

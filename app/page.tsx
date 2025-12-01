@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Card from '@/components/Card';
+import HeroPortrait from '@/components/HeroPortrait';
 import { generateStarterDeck } from '@/lib/cards';
 import { GameState, Player, BoardCard } from '@/lib/types';
 
@@ -29,18 +30,32 @@ type AttackState = {
 };
 
 export default function Home() {
-  const [gameState, setGameState] = useState<GameState>({
-    player1: createInitialPlayer('player1'),
-    player2: createInitialPlayer('player2'),
-    turn: 'player1',
-    turnNumber: 1,
-    phase: 'main',
-  });
-
+  const [gameState, setGameState] = useState<GameState | null>(null);
   const [attackState, setAttackState] = useState<AttackState>({
     attackerId: null,
     mode: 'idle',
   });
+
+  // Initialize game state on client only to avoid hydration mismatch
+  useEffect(() => {
+    const initialState = {
+      player1: createInitialPlayer('player1'),
+      player2: createInitialPlayer('player2'),
+      turn: 'player1' as const,
+      turnNumber: 1,
+      phase: 'main' as const,
+    };
+    setGameState(initialState);
+  }, []); // Only run once on mount
+
+  // Don't render until state is initialized
+  if (!gameState) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 flex items-center justify-center">
+        <div className="text-white text-2xl">Loading Game of Memes...</div>
+      </div>
+    );
+  }
 
   const currentPlayer = gameState[gameState.turn];
   const opponent = gameState.turn === 'player1' ? gameState.player2 : gameState.player1;
@@ -52,6 +67,8 @@ export default function Home() {
     if (!card || card.cost > currentPlayer.mana) return;
 
     setGameState(prev => {
+      if (!prev) return prev;
+
       const newPlayer = { ...currentPlayer };
       newPlayer.hand = newPlayer.hand.filter(c => c.id !== cardId);
       newPlayer.board.push({
@@ -65,15 +82,12 @@ export default function Home() {
 
       return {
         ...prev,
-        [gameState.turn]: newPlayer,
-      };
+        [prev.turn]: newPlayer,
+      } as GameState;
     });
   };
 
   const handleSelectAttacker = (cardId: string) => {
-    const attacker = currentPlayer.board.find(c => c.id === cardId);
-    if (!attacker || !attacker.canAttack || attacker.summoningSickness) return;
-
     setAttackState({
       attackerId: cardId,
       mode: 'selecting_target',
@@ -84,6 +98,8 @@ export default function Home() {
     if (!attackState.attackerId) return;
 
     setGameState(prev => {
+      if (!prev) return prev;
+
       const newState = { ...prev };
       const attackingPlayer = newState[currentPlayerId];
       const defendingPlayer = newState[opponentId];
@@ -92,6 +108,9 @@ export default function Home() {
       const defender = defendingPlayer.board.find(c => c.id === targetId);
 
       if (!attacker || !defender) return prev;
+
+      // Skip if already attacked (prevent double-click)
+      if (!attacker.canAttack) return prev;
 
       // Deal damage
       attacker.currentHealth -= defender.currentAttack;
@@ -117,7 +136,7 @@ export default function Home() {
         return true;
       });
 
-      return newState;
+      return newState as GameState;
     });
 
     setAttackState({ attackerId: null, mode: 'idle' });
@@ -127,12 +146,17 @@ export default function Home() {
     if (!attackState.attackerId) return;
 
     setGameState(prev => {
+      if (!prev) return prev;
+
       const newState = { ...prev };
       const attackingPlayer = newState[currentPlayerId];
       const defendingPlayer = newState[opponentId];
 
       const attacker = attackingPlayer.board.find(c => c.id === attackState.attackerId);
       if (!attacker) return prev;
+
+      // Skip if already attacked (prevent double-click)
+      if (!attacker.canAttack) return prev;
 
       // Deal damage to hero
       defendingPlayer.health -= attacker.currentAttack;
@@ -145,7 +169,7 @@ export default function Home() {
         newState.winner = currentPlayerId;
       }
 
-      return newState;
+      return newState as GameState;
     });
 
     setAttackState({ attackerId: null, mode: 'idle' });
@@ -153,6 +177,8 @@ export default function Home() {
 
   const handleEndTurn = () => {
     setGameState(prev => {
+      if (!prev) return prev;
+
       const nextTurn = prev.turn === 'player1' ? 'player2' : 'player1';
       const nextPlayer = prev[nextTurn];
 
@@ -228,40 +254,39 @@ export default function Home() {
       {/* Header */}
       <div className="max-w-7xl mx-auto mb-8">
         <h1 className="text-4xl font-bold text-center text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-600">
-          Game of Memes
+          Game of Memes - TEST VERSION 2.0
         </h1>
         <p className="text-center text-gray-400 mt-2">Where Losers Balance the Meta</p>
       </div>
 
-      <div className="max-w-7xl mx-auto space-y-6">
+      <div className="max-w-7xl mx-auto space-y-6 mt-24">
         {/* Opponent Area */}
-        <div className="bg-red-900/20 rounded-xl p-4 border-2 border-red-700/50">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-4">
-              <button
-                onClick={handleAttackHero}
-                disabled={attackState.mode !== 'selecting_target'}
-                className={`text-2xl font-bold px-4 py-2 rounded-lg transition-all ${
-                  attackState.mode === 'selecting_target'
-                    ? 'bg-red-600 hover:bg-red-700 cursor-pointer ring-4 ring-red-400 animate-pulse'
-                    : 'bg-transparent'
-                }`}
-              >
-                ❤️ {opponent.health}/{opponent.maxHealth}
-              </button>
-              <div className="text-lg">
-                💎 {opponent.mana}/{opponent.maxMana}
-              </div>
+        <div className="bg-red-900/20 rounded-xl p-4 border-2 border-red-700/50 relative">
+          {/* Opponent Hero - Centered at top */}
+          <div className="absolute -top-20 left-1/2 transform -translate-x-1/2 z-10">
+            <HeroPortrait
+              health={opponent.health}
+              maxHealth={opponent.maxHealth}
+              isOpponent={true}
+              isTargetable={attackState.mode === 'selecting_target'}
+              onClick={handleAttackHero}
+            />
+          </div>
+
+          {/* Opponent Stats - Top Right */}
+          <div className="absolute top-4 right-4 flex flex-col items-end gap-2">
+            <div className="text-lg text-gray-300">
+              💎 <span className="font-bold text-blue-400">{opponent.mana}/{opponent.maxMana}</span>
             </div>
             <div className="text-sm text-gray-400">
-              Deck: {opponent.deck.length} | Hand: {opponent.hand.length}
+              📚 {opponent.deck.length} | 🃏 {opponent.hand.length}
             </div>
           </div>
 
           {/* Opponent Board */}
-          <div className="flex gap-2 justify-center min-h-[200px] items-center">
+          <div className="flex gap-2 justify-center min-h-[200px] items-center pt-8">
             {opponent.board.length === 0 ? (
-              <p className="text-gray-500">No cards on board</p>
+              <p className="text-gray-500">Opponent's board is empty</p>
             ) : (
               opponent.board.map((card) => (
                 <div
@@ -287,25 +312,40 @@ export default function Home() {
             </span>
             <span className="ml-4 text-sm opacity-80">Turn {gameState.turnNumber}</span>
           </div>
-          {attackState.mode === 'selecting_target' && (
-            <div className="mt-2 text-yellow-400 animate-pulse">
-              ⚔️ Select a target to attack!
+          {attackState.mode === 'selecting_target' ? (
+            <div className="mt-2 space-y-1">
+              <div className="text-yellow-400 animate-pulse font-bold">
+                ⚔️ Select a target to attack!
+              </div>
+              <div className="text-xs text-gray-400">
+                Click enemy minion to trade • Click enemy hero (pulsing red) to go face
+              </div>
+            </div>
+          ) : (
+            <div className="mt-2 text-xs text-gray-400">
+              {currentPlayer.board.some(c => c.canAttack && !c.summoningSickness) ? (
+                <span className="text-green-400">✓ You have minions ready to attack! Click them to select.</span>
+              ) : currentPlayer.board.length > 0 ? (
+                <span className="text-orange-400">⏳ Your minions have summoning sickness. End turn to wake them up.</span>
+              ) : (
+                <span>Play cards from your hand to summon minions</span>
+              )}
             </div>
           )}
         </div>
 
         {/* Player Area */}
-        <div className="bg-blue-900/20 rounded-xl p-4 border-2 border-blue-700/50">
+        <div className="bg-blue-900/20 rounded-xl p-4 border-2 border-blue-700/50 relative pb-24">
           {/* Player Board */}
           <div className="flex gap-2 justify-center min-h-[200px] items-center mb-4">
             {currentPlayer.board.length === 0 ? (
-              <p className="text-gray-500">No cards on board</p>
+              <p className="text-gray-500">Your board is empty</p>
             ) : (
               currentPlayer.board.map((card) => (
                 <div
                   key={card.id}
                   onClick={() => handleSelectAttacker(card.id)}
-                  className={card.canAttack && !card.summoningSickness ? 'cursor-pointer' : ''}
+                  className="cursor-pointer"
                 >
                   <Card
                     card={card}
@@ -317,41 +357,87 @@ export default function Home() {
             )}
           </div>
 
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-4">
-              <div className="text-2xl font-bold">
-                ❤️ {currentPlayer.health}/{currentPlayer.maxHealth}
-              </div>
-              <div className="text-lg">
-                💎 {currentPlayer.mana}/{currentPlayer.maxMana}
-              </div>
-            </div>
+          {/* Player Hero - Centered at bottom */}
+          <div className="absolute -bottom-20 left-1/2 transform -translate-x-1/2 z-10">
+            <HeroPortrait
+              health={currentPlayer.health}
+              maxHealth={currentPlayer.maxHealth}
+              isOpponent={false}
+            />
+          </div>
+
+          {/* End Turn Button - Bottom Right */}
+          <div className="absolute bottom-4 right-4">
             <button
               onClick={handleEndTurn}
-              className="bg-green-600 hover:bg-green-700 px-6 py-2 rounded-lg font-bold transition-colors"
+              className="bg-green-600 hover:bg-green-700 px-8 py-4 rounded-lg font-bold text-lg transition-colors shadow-lg hover:shadow-xl"
             >
               End Turn →
             </button>
           </div>
 
-          {/* Player Hand */}
-          <div className="flex gap-3 justify-center flex-wrap">
-            {currentPlayer.hand.map((card) => (
-              <Card
-                key={card.id}
-                card={card}
-                onClick={() => handlePlayCard(card.id)}
-                isPlayable={card.cost <= currentPlayer.mana}
-                isInHand={true}
-              />
-            ))}
+          {/* Player Stats - Bottom Left */}
+          <div className="absolute bottom-4 left-4 flex flex-col gap-2">
+            <div className="text-lg text-gray-300">
+              💎 <span className="font-bold text-blue-400">{currentPlayer.mana}/{currentPlayer.maxMana}</span>
+            </div>
+          </div>
+
+          {/* Player Hand - Fanned out */}
+          <div className="flex justify-center items-end mt-4 relative h-56">
+            {currentPlayer.hand.map((card, index) => {
+              const totalCards = currentPlayer.hand.length;
+              const middleIndex = (totalCards - 1) / 2;
+              const offsetFromCenter = index - middleIndex;
+
+              // Fan effect: rotate and translate based on position
+              const rotation = offsetFromCenter * 5; // degrees
+              const yOffset = Math.abs(offsetFromCenter) * 8; // lower cards at edges
+              const xSpacing = 40; // horizontal spacing
+
+              return (
+                <div
+                  key={card.id}
+                  className="absolute"
+                  style={{
+                    transform: `translateX(${offsetFromCenter * xSpacing}px) translateY(${yOffset}px) rotate(${rotation}deg)`,
+                    zIndex: index,
+                    transition: 'transform 0.3s ease',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = `translateX(${offsetFromCenter * xSpacing}px) translateY(-20px) rotate(0deg)`;
+                    e.currentTarget.style.zIndex = '100';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = `translateX(${offsetFromCenter * xSpacing}px) translateY(${yOffset}px) rotate(${rotation}deg)`;
+                    e.currentTarget.style.zIndex = String(index);
+                  }}
+                >
+                  <Card
+                    card={card}
+                    onClick={() => handlePlayCard(card.id)}
+                    isPlayable={card.cost <= currentPlayer.mana}
+                    isInHand={true}
+                  />
+                </div>
+              );
+            })}
           </div>
         </div>
       </div>
 
       {/* Instructions */}
-      <div className="max-w-7xl mx-auto mt-8 text-center text-gray-400 text-sm">
-        <p>Play cards from hand • Click your minions to attack • Click enemy minions or hero to target • End turn when done</p>
+      <div className="max-w-7xl mx-auto mt-8 text-center space-y-2">
+        <div className="text-sm text-gray-400">
+          <span className="text-blue-400 font-bold">💎 Mana:</span> Play cards that cost ≤ your mana
+          <span className="mx-3">•</span>
+          <span className="text-green-400 font-bold">⚔️ Attack:</span> Click your minion → Click enemy target
+          <span className="mx-3">•</span>
+          <span className="text-orange-400 font-bold">😴 Summoning Sickness:</span> Wait 1 turn after playing
+        </div>
+        <div className="text-xs text-gray-500">
+          Tip: Minions that already attacked are dimmed and can't be selected again
+        </div>
       </div>
     </div>
   );

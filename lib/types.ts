@@ -1,14 +1,32 @@
+// Market data (future: fetched from chain/API)
+export interface MarketData {
+  price: number;
+  marketCap: number;
+  liquidity: number;
+  volume24h: number;
+  priceChange24h: number;
+  holderCount?: number;
+}
+
 // Core card types
 export interface Card {
   id: string;
   name: string;
+  tokenAddress?: string; // Future: actual token address
+
+  // Game stats (calculated from market data at match start)
   cost: number;
   attack: number;
   health: number;
+
+  // Display
   imageUrl: string;
   description?: string;
   rarity: 'common' | 'rare' | 'epic' | 'legendary';
   effect?: CardEffect;
+
+  // Market stats (for display, locked during match)
+  marketData?: MarketData;
 }
 
 export type CardEffect = 'battlecry' | 'deathrattle' | 'taunt' | 'charge' | 'lifesteal';

@@ -1,88 +1,169 @@
 import { Card } from './types';
+import { calculateCardStats } from './marketStats';
 
-// Initial meme card set
-export const STARTER_CARDS: Card[] = [
+// Mock market data for MVP (future: fetch from DEX Screener/CoinGecko)
+export const MEME_CARDS_WITH_MARKET_DATA: Card[] = [
   {
     id: 'pepe-1',
-    name: 'Rare Pepe',
-    cost: 2,
-    attack: 2,
-    health: 3,
-    rarity: 'rare',
-    imageUrl: '/cards/pepe.jpg',
-    description: 'A classic meme warrior',
+    name: '$PEPE',
+    imageUrl: '/sad-pepe-frog-meme-crying.jpg',
+    description: 'OG meme coin. Never dies.',
+    ...calculateCardStats({
+      price: 0.000008,
+      marketCap: 3_400_000_000,
+      liquidity: 45_000_000,
+      volume24h: 180_000_000,
+      priceChange24h: 5.2,
+    }),
+    marketData: {
+      price: 0.000008,
+      marketCap: 3_400_000_000,
+      liquidity: 45_000_000,
+      volume24h: 180_000_000,
+      priceChange24h: 5.2,
+    },
   },
   {
     id: 'doge-1',
-    name: 'Doge Commander',
-    cost: 3,
-    attack: 3,
-    health: 3,
-    rarity: 'common',
-    imageUrl: '/cards/doge.jpg',
-    description: 'Much attack. Very damage. Wow.',
+    name: '$DOGE',
+    imageUrl: '/shiba-inu-dog-diamond-hands-crypto-meme.jpg',
+    description: 'Much hodl. Very diamond hands. Wow.',
+    ...calculateCardStats({
+      price: 0.08,
+      marketCap: 11_500_000_000,
+      liquidity: 120_000_000,
+      volume24h: 450_000_000,
+      priceChange24h: -2.1,
+    }),
+    marketData: {
+      price: 0.08,
+      marketCap: 11_500_000_000,
+      liquidity: 120_000_000,
+      volume24h: 450_000_000,
+      priceChange24h: -2.1,
+    },
   },
   {
     id: 'wojak-1',
-    name: 'Sad Wojak',
-    cost: 1,
-    attack: 1,
-    health: 2,
-    rarity: 'common',
-    imageUrl: '/cards/wojak.jpg',
-    description: 'Starts weak but feels strong inside',
+    name: '$WOJAK',
+    imageUrl: '/wojak-meme-face-crying-trader.jpg',
+    description: 'Panic sells. Paper hands.',
+    ...calculateCardStats({
+      price: 0.00012,
+      marketCap: 45_000,
+      liquidity: 8_000,
+      volume24h: 12_000,
+      priceChange24h: -15.5,
+    }),
+    marketData: {
+      price: 0.00012,
+      marketCap: 45_000,
+      liquidity: 8_000,
+      volume24h: 12_000,
+      priceChange24h: -15.5,
+    },
   },
   {
     id: 'chad-1',
-    name: 'Giga Chad',
-    cost: 5,
-    attack: 6,
-    health: 6,
-    rarity: 'legendary',
-    imageUrl: '/cards/chad.jpg',
-    description: 'The ultimate alpha',
+    name: '$CHAD',
+    imageUrl: '/chad-muscular-bull-crypto-meme.jpg',
+    description: 'Bull market alpha. Never backs down.',
     effect: 'charge',
-  },
-  {
-    id: 'nyan-1',
-    name: 'Nyan Cat',
-    cost: 4,
-    attack: 3,
-    health: 5,
-    rarity: 'epic',
-    imageUrl: '/cards/nyan.jpg',
-    description: 'Flies over taunts',
-  },
-  {
-    id: 'trollface-1',
-    name: 'Troll Face',
-    cost: 2,
-    attack: 2,
-    health: 2,
-    rarity: 'common',
-    imageUrl: '/cards/troll.jpg',
-    description: 'U mad bro?',
-    effect: 'battlecry',
-  },
-  {
-    id: 'distracted-1',
-    name: 'Distracted Boyfriend',
-    cost: 3,
-    attack: 2,
-    health: 4,
-    rarity: 'rare',
-    imageUrl: '/cards/distracted.jpg',
-    description: 'Attacks random target',
+    ...calculateCardStats({
+      price: 1.25,
+      marketCap: 85_000_000,
+      liquidity: 12_000_000,
+      volume24h: 28_000_000,
+      priceChange24h: 22.8,
+    }),
+    marketData: {
+      price: 1.25,
+      marketCap: 85_000_000,
+      liquidity: 12_000_000,
+      volume24h: 28_000_000,
+      priceChange24h: 22.8,
+    },
   },
   {
     id: 'stonks-1',
-    name: 'Stonks Guy',
-    cost: 4,
-    attack: 4,
-    health: 4,
-    rarity: 'epic',
-    imageUrl: '/cards/stonks.jpg',
-    description: 'Only goes up',
+    name: '$STONKS',
+    imageUrl: '/stonks-meme-man-suit-pointing-up.jpg',
+    description: 'Only goes up. Trust the chart.',
+    ...calculateCardStats({
+      price: 0.45,
+      marketCap: 8_500_000,
+      liquidity: 950_000,
+      volume24h: 2_200_000,
+      priceChange24h: 12.3,
+    }),
+    marketData: {
+      price: 0.45,
+      marketCap: 8_500_000,
+      liquidity: 950_000,
+      volume24h: 2_200_000,
+      priceChange24h: 12.3,
+    },
+  },
+  {
+    id: 'panic-1',
+    name: '$PANIC',
+    imageUrl: '/angry-newspaper-reader-panic-meme.jpg',
+    description: 'FUD spreader. Weak hands activate.',
+    ...calculateCardStats({
+      price: 0.0015,
+      marketCap: 125_000,
+      liquidity: 18_000,
+      volume24h: 32_000,
+      priceChange24h: -8.7,
+    }),
+    marketData: {
+      price: 0.0015,
+      marketCap: 125_000,
+      liquidity: 18_000,
+      volume24h: 32_000,
+      priceChange24h: -8.7,
+    },
+  },
+  {
+    id: 'bear-1',
+    name: '$BEAR',
+    imageUrl: '/scary-bear-market-crash-meme.jpg',
+    description: 'Crashes markets. Destroys portfolios.',
+    effect: 'battlecry',
+    ...calculateCardStats({
+      price: 0.028,
+      marketCap: 2_800_000,
+      liquidity: 450_000,
+      volume24h: 980_000,
+      priceChange24h: 8.4,
+    }),
+    marketData: {
+      price: 0.028,
+      marketCap: 2_800_000,
+      liquidity: 450_000,
+      volume24h: 980_000,
+      priceChange24h: 8.4,
+    },
+  },
+  {
+    id: 'nervous-1',
+    name: '$PAPER',
+    imageUrl: '/nervous-sweating-man-selling-meme.jpg',
+    description: 'Sells at bottom. Regrets forever.',
+    ...calculateCardStats({
+      price: 0.00089,
+      marketCap: 78_000,
+      liquidity: 12_000,
+      volume24h: 8_500,
+      priceChange24h: -22.1,
+    }),
+    marketData: {
+      price: 0.00089,
+      marketCap: 78_000,
+      liquidity: 12_000,
+      volume24h: 8_500,
+      priceChange24h: -22.1,
+    },
   },
 ];
 
@@ -90,15 +171,10 @@ export const STARTER_CARDS: Card[] = [
 export function generateStarterDeck(): Card[] {
   const deck: Card[] = [];
 
-  // Add copies of basic cards
-  STARTER_CARDS.filter(c => c.rarity === 'common').forEach(card => {
+  // Add 2 copies of each card for now
+  MEME_CARDS_WITH_MARKET_DATA.forEach(card => {
     deck.push({ ...card });
     deck.push({ ...card, id: card.id + '-copy' });
-  });
-
-  // Add one copy of rares
-  STARTER_CARDS.filter(c => c.rarity === 'rare').forEach(card => {
-    deck.push({ ...card });
   });
 
   return shuffleDeck(deck);
