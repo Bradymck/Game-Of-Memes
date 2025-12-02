@@ -34,3 +34,5 @@ yarn-error.log*
 next-env.d.ts
 public/models/Pepe.obj
 *.obj
+uploads_files_*.obj
+uploads_files_*.OBJ
