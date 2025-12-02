@@ -39,6 +39,7 @@ export function MinionPortrait({
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [isOverTarget, setIsOverTarget] = useState(false);
   const startPosRef = useRef({ x: 0, y: 0 });
+  const cardRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!isDragging) return;
@@ -48,42 +49,76 @@ export function MinionPortrait({
       const deltaY = e.clientY - startPosRef.current.y;
       setDragOffset({ x: deltaX, y: deltaY });
 
-      // Check if hovering over a valid target
-      const target = document.elementFromPoint(e.clientX, e.clientY);
+      // Clear all previous highlights first
+      document.querySelectorAll('[data-minion-id], [data-hero-target]').forEach(el => {
+        el.classList.remove('ring-4', 'ring-red-500', 'ring-opacity-80', 'animate-pulse');
+      });
+
+      // Get the card's current position (including drag offset)
+      if (!cardRef.current) return;
+      const cardRect = cardRef.current.getBoundingClientRect();
+      const cardCenterX = cardRect.left + cardRect.width / 2;
+      const cardCenterY = cardRect.top + cardRect.height / 2;
+
+      // Check if the CARD CENTER is hovering over a valid target
+      const target = document.elementFromPoint(cardCenterX, cardCenterY);
       const targetCard = target?.closest('[data-minion-id]');
       const targetHero = target?.closest('[data-hero-target]');
 
-      setIsOverTarget(!!(targetCard || targetHero));
-
-      // Highlight all valid targets
-      document.querySelectorAll('[data-minion-id]').forEach(el => {
-        if (el.getAttribute('data-minion-id') !== card.id) {
-          el.classList.add('ring-4', 'ring-green-400', 'ring-opacity-70');
+      // Only highlight the SPECIFIC card/hero we're hovering over (not this card)
+      if (targetCard) {
+        const minionId = targetCard.getAttribute('data-minion-id');
+        if (minionId !== card.id) {
+          targetCard.classList.add('ring-4', 'ring-red-500', 'ring-opacity-80', 'animate-pulse');
+          setIsOverTarget(true);
+        } else {
+          setIsOverTarget(false);
         }
-      });
-      document.querySelectorAll('[data-hero-target]').forEach(el => {
-        el.classList.add('ring-4', 'ring-green-400', 'ring-opacity-70');
-      });
+      } else if (targetHero) {
+        targetHero.classList.add('ring-4', 'ring-red-500', 'ring-opacity-80', 'animate-pulse');
+        setIsOverTarget(true);
+      } else {
+        setIsOverTarget(false);
+      }
     };
 
-    const handleMouseUp = (e: MouseEvent) => {
+    const handleMouseUp = () => {
       // Clear all highlights
       document.querySelectorAll('[data-minion-id], [data-hero-target]').forEach(el => {
-        el.classList.remove('ring-4', 'ring-green-400', 'ring-opacity-70');
+        el.classList.remove('ring-4', 'ring-red-500', 'ring-opacity-80', 'animate-pulse');
       });
 
-      // Check if we're over an enemy target (with forgiving hit detection)
-      const target = document.elementFromPoint(e.clientX, e.clientY);
+      // Get the card's current position for drop detection
+      if (!cardRef.current) return;
+      const cardRect = cardRef.current.getBoundingClientRect();
+      const cardCenterX = cardRect.left + cardRect.width / 2;
+      const cardCenterY = cardRect.top + cardRect.height / 2;
+
+      // Check if the CARD CENTER is over an enemy target
+      const target = document.elementFromPoint(cardCenterX, cardCenterY);
       const targetCard = target?.closest('[data-minion-id]');
       const targetHero = target?.closest('[data-hero-target]');
 
-      if (onDragAttack) {
-        if (targetCard) {
-          const targetId = targetCard.getAttribute('data-minion-id');
-          onDragAttack(targetId);
-        } else if (targetHero) {
-          onDragAttack(null); // null = attack hero
+      // Only attack if canAttack is true!
+      if (canAttack && onDragAttack) {
+        // Attack animation!
+        if (targetCard || targetHero) {
+          const targetElement = (targetCard || targetHero) as HTMLElement;
+          // Quick shake + flash
+          targetElement.classList.add('animate-shake');
+          setTimeout(() => targetElement.classList.remove('animate-shake'), 300);
+
+          // Execute attack
+          if (targetCard) {
+            const targetId = targetCard.getAttribute('data-minion-id');
+            onDragAttack(targetId);
+          } else if (targetHero) {
+            onDragAttack(null); // null = attack hero
+          }
         }
+      } else if (!canAttack && (targetCard || targetHero)) {
+        // Can't attack - just do click behavior
+        onClick?.();
       }
 
       setIsDragging(false);
@@ -100,17 +135,23 @@ export function MinionPortrait({
   }, [isDragging, onDragAttack, card.id]);
 
   const handleMouseDown = (e: React.MouseEvent) => {
-    if (!canAttack) {
-      onClick?.();
-      return;
-    }
+    // Only allow drag if card can attack
+    if (!canAttack) return;
+
     e.preventDefault();
     startPosRef.current = { x: e.clientX, y: e.clientY };
     setIsDragging(true);
   };
 
+  const handleClick = () => {
+    // If dragging was initiated, don't trigger click
+    if (isDragging) return;
+    onClick?.();
+  };
+
   return (
     <div
+      ref={cardRef}
       className={cn(
         "relative transition-all duration-200 group",
         canAttack && !isDragging && "cursor-grab hover:scale-110",
@@ -123,8 +164,8 @@ export function MinionPortrait({
         transition: isDragging ? 'none' : 'transform 0.2s',
         zIndex: isDragging ? 100 : 'auto',
       }}
-      onClick={!canAttack ? onClick : undefined}
-      onMouseDown={canAttack ? handleMouseDown : undefined}
+      onClick={handleClick}
+      onMouseDown={handleMouseDown}
       data-minion-id={card.id}
     >
       {/* Drag indicator arrow */}
@@ -148,7 +189,7 @@ export function MinionPortrait({
           rarityBorder[card.rarity],
           rarityGlow[card.rarity] && `shadow-xl ${rarityGlow[card.rarity]}`,
           isSelected && "ring-4 ring-green-400 ring-opacity-80",
-          isTargetable && "ring-4 ring-red-500 ring-opacity-75 animate-pulse",
+          isTargetable && "ring-4 ring-red-600 ring-opacity-90 animate-pulse", // Brighter red
           canAttack && !isSelected && "ring-2 ring-green-500/50",
           card.rarity === "legendary" && "animate-glow-pulse",
         )}
@@ -189,13 +230,6 @@ export function MinionPortrait({
       {/* Health Stat (bottom right) */}
       <div className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-gradient-to-b from-red-500 to-red-700 border-2 border-red-400 flex items-center justify-center shadow-md">
         <span className="text-white font-bold text-sm">{card.health}</span>
-      </div>
-
-      {/* Ticker tooltip on hover */}
-      <div className="absolute -top-8 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-        <div className="bg-black/90 text-amber-400 text-xs px-2 py-1 rounded whitespace-nowrap font-mono">
-          {card.ticker}
-        </div>
       </div>
     </div>
   )

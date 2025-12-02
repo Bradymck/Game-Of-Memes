@@ -1,5 +1,6 @@
 "use client"
 
+import { useMemo } from "react"
 import { useGame } from "@/lib/game-context"
 import { usePrivy } from "@privy-io/react-auth"
 import { HeroPortrait } from "@/components/hero-portrait"
@@ -11,10 +12,24 @@ import { cn } from "@/lib/utils"
 
 export function GameBoard() {
   const { user } = usePrivy();
+
+  // Stable random positions for deck piles (don't regenerate on every render!)
+  const deckPositions = useMemo(() =>
+    Array.from({ length: 12 }, () => ({
+      rotation: (Math.random() - 0.5) * 8,
+      x: (Math.random() - 0.5) * 4,
+      y: (Math.random() - 0.5) * 4,
+    })),
+    []
+  );
   const {
     playerHand,
     playerField,
+    playerDeck,
+    playerGraveyard,
     opponentField,
+    opponentDeck,
+    opponentGraveyard,
     playerMana,
     maxPlayerMana,
     opponentMana,
@@ -65,31 +80,37 @@ export function GameBoard() {
 
             {/* ========== TOP ROW: Opponent Area ========== */}
 
-            {/* Opponent Deck (Top Left) - BIGGER, MESSY PILE! */}
-            <div className="row-start-1 col-start-1 flex items-start justify-center pt-4">
+            {/* Opponent Deck & Graveyard (Top Left) */}
+            <div className="row-start-1 col-start-1 flex flex-col items-center justify-start pt-4 gap-4">
+              {/* Opponent Deck */}
               <div className="relative w-20 h-28">
-                {[...Array(12)].map((_, i) => {
-                  const randomRotation = (Math.random() - 0.5) * 8; // Random tilt
-                  const randomX = (Math.random() - 0.5) * 4;
-                  const randomY = (Math.random() - 0.5) * 4;
-                  return (
-                    <div
-                      key={i}
-                      className="absolute w-20 h-28 rounded-lg overflow-hidden border-2 border-purple-600 shadow-lg"
-                      style={{
-                        bottom: i * 1.5 + randomY,
-                        left: i * 0.5 + randomX,
-                        rotate: `${randomRotation}deg`,
-                        zIndex: 12 - i,
-                      }}
-                    >
-                      <img src="/vibe.png" alt="card back" className="w-full h-full object-cover" />
-                    </div>
-                  );
-                })}
-                <div className="absolute -bottom-6 left-1/2 -translate-x-1/2 text-amber-100/70 font-bold text-sm drop-shadow">
-                  18
-                </div>
+                {deckPositions.map((pos, i) => (
+                  <div
+                    key={i}
+                    className="absolute w-20 h-28 rounded-lg overflow-hidden border border-red-600/60 shadow-lg"
+                    style={{
+                      bottom: i * 1.5 + pos.y,
+                      left: i * 0.5 + pos.x,
+                      rotate: `${pos.rotation}deg`,
+                      zIndex: 12 - i,
+                    }}
+                  >
+                    <img src="/vibe.png" alt="card back" className="w-full h-full object-cover" />
+                  </div>
+                ))}
+              </div>
+
+              {/* Opponent Graveyard */}
+              <div className="w-20 h-28 rounded-lg border border-dashed border-purple-500/30 bg-purple-950/10 flex items-center justify-center shadow-lg">
+                {opponentGraveyard.length > 0 && opponentGraveyard[opponentGraveyard.length - 1].image ? (
+                  <img
+                    src={opponentGraveyard[opponentGraveyard.length - 1].image}
+                    alt="top graveyard card"
+                    className="w-full h-full object-cover rounded-lg opacity-60"
+                  />
+                ) : (
+                  <span className="text-purple-400/30 text-3xl">💀</span>
+                )}
               </div>
             </div>
 
@@ -178,31 +199,37 @@ export function GameBoard() {
 
             {/* ========== BOTTOM ROW: Player Area ========== */}
 
-            {/* Player Deck (Bottom Left) - BIGGER, MESSY PILE! */}
-            <div className="row-start-3 col-start-1 flex items-end justify-center pb-4">
+            {/* Player Deck & Graveyard (Bottom Left) */}
+            <div className="row-start-3 col-start-1 flex flex-col items-center justify-end pb-4 gap-4">
+              {/* Player Graveyard */}
+              <div className="w-20 h-28 rounded-lg border border-dashed border-purple-500/30 bg-purple-950/10 flex items-center justify-center shadow-lg">
+                {playerGraveyard.length > 0 && playerGraveyard[playerGraveyard.length - 1].image ? (
+                  <img
+                    src={playerGraveyard[playerGraveyard.length - 1].image}
+                    alt="top graveyard card"
+                    className="w-full h-full object-cover rounded-lg opacity-60"
+                  />
+                ) : (
+                  <span className="text-purple-400/30 text-3xl">💀</span>
+                )}
+              </div>
+
+              {/* Player Deck */}
               <div className="relative w-20 h-28">
-                {[...Array(12)].map((_, i) => {
-                  const randomRotation = (Math.random() - 0.5) * 8;
-                  const randomX = (Math.random() - 0.5) * 4;
-                  const randomY = (Math.random() - 0.5) * 4;
-                  return (
-                    <div
-                      key={i}
-                      className="absolute w-20 h-28 rounded-lg overflow-hidden border-2 border-purple-600 shadow-lg"
-                      style={{
-                        bottom: i * 1.5 + randomY,
-                        left: i * 0.5 + randomX,
-                        rotate: `${randomRotation}deg`,
-                        zIndex: 12 - i,
-                      }}
-                    >
-                      <img src="/vibe.png" alt="card back" className="w-full h-full object-cover" />
-                    </div>
-                  );
-                })}
-                <div className="absolute -bottom-6 left-1/2 -translate-x-1/2 text-amber-100/70 font-bold text-sm drop-shadow">
-                  18
-                </div>
+                {deckPositions.map((pos, i) => (
+                  <div
+                    key={i}
+                    className="absolute w-20 h-28 rounded-lg overflow-hidden border border-red-600/60 shadow-lg"
+                    style={{
+                      bottom: i * 1.5 + pos.y,
+                      left: i * 0.5 + pos.x,
+                      rotate: `${pos.rotation}deg`,
+                      zIndex: 12 - i,
+                    }}
+                  >
+                    <img src="/vibe.png" alt="card back" className="w-full h-full object-cover" />
+                  </div>
+                ))}
               </div>
             </div>
 
@@ -286,7 +313,7 @@ export function GameBoard() {
           </div>
 
           {/* Player Hand Zone - OUTSIDE GRID, Bottom Right Corner */}
-          <div className="absolute bottom-12 right-2 w-96 h-28 z-20">
+          <div className="absolute bottom-12 right-2 w-96 h-28 z-[100]">
             <DraggableHand
               cards={playerHand}
               playerMana={playerMana}

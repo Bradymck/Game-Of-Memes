@@ -159,10 +159,7 @@ function DraggableCard({ card, isPlayable, onPlay }: DraggableCardProps) {
         <span className="text-white font-bold text-[10px]">{card.health}</span>
       </div>
 
-      {/* Name */}
-      <div className="absolute bottom-8 inset-x-0 bg-black/80 py-0.5 px-1">
-        <p className="text-white text-[8px] font-semibold text-center truncate">{card.name}</p>
-      </div>
+      {/* Name - Hidden to keep cards clean */}
 
       {/* Drag hint */}
       {isDragging && (

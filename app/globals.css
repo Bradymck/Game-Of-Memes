@@ -265,3 +265,14 @@
 .wood-frame {
   background: linear-gradient(180deg, var(--wood) 0%, var(--wood-dark) 100%);
 }
+
+/* Attack shake animation */
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-4px) rotate(-2deg); }
+  75% { transform: translateX(4px) rotate(2deg); }
+}
+
+.animate-shake {
+  animation: shake 0.3s ease-in-out;
+}

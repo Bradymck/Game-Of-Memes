@@ -19,7 +19,11 @@ export interface MemeCardData {
 interface GameState {
   playerHand: MemeCardData[]
   playerField: MemeCardData[]
+  playerDeck: MemeCardData[]
+  playerGraveyard: MemeCardData[]
   opponentField: MemeCardData[]
+  opponentDeck: MemeCardData[]
+  opponentGraveyard: MemeCardData[]
   playerMana: number
   maxPlayerMana: number
   opponentMana: number
@@ -148,7 +152,11 @@ export function GameProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<GameState>({
     playerHand: ghostCards, // Start with ghost cards!
     playerField: [],
+    playerDeck: [], // Will be populated when cards load
+    playerGraveyard: [],
     opponentField: [],
+    opponentDeck: [],
+    opponentGraveyard: [],
     playerMana: 1,
     maxPlayerMana: 1,
     opponentMana: 1,
@@ -172,9 +180,13 @@ export function GameProvider({ children }: { children: ReactNode }) {
       const shuffled2 = [...userCards].sort(() => Math.random() - 0.5);
 
       setState({
-        playerHand: shuffled1.slice(0, 4),
+        playerHand: shuffled1.slice(0, 4), // Draw initial 4 cards
+        playerDeck: shuffled1.slice(4), // Rest goes in deck
         playerField: [],
+        playerGraveyard: [],
         opponentField: shuffled2.slice(0, 2).map(c => ({ ...c, canAttack: false })), // Opponent starts with 2 cards on board
+        opponentDeck: shuffled2.slice(2), // Rest in opponent deck
+        opponentGraveyard: [],
         playerMana: 1,
         maxPlayerMana: 1,
         opponentMana: 1,
@@ -232,6 +244,10 @@ export function GameProvider({ children }: { children: ReactNode }) {
       const newTargetHealth = target.health - attacker.attack
       const newAttackerHealth = attacker.health - target.attack
 
+      // Add dead minions to graveyard
+      const playerGraveyard = newAttackerHealth <= 0 ? [...prev.playerGraveyard, attacker] : prev.playerGraveyard
+      const opponentGraveyard = newTargetHealth <= 0 ? [...prev.opponentGraveyard, target] : prev.opponentGraveyard
+
       return {
         ...prev,
         playerField:
@@ -244,6 +260,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
           newTargetHealth <= 0
             ? prev.opponentField.filter((c) => c.id !== target.id)
             : prev.opponentField.map((c) => (c.id === target.id ? { ...c, health: newTargetHealth } : c)),
+        playerGraveyard,
+        opponentGraveyard,
         selectedAttacker: null,
       }
     })
@@ -312,9 +330,16 @@ export function GameProvider({ children }: { children: ReactNode }) {
         const newMaxMana = Math.min(10, prev.maxPlayerMana + 1);
         const newOpponentMaxMana = Math.min(10, prev.maxOpponentMana + 1);
 
+        // Draw a card from player deck (if any left)
+        const drawnCard = prev.playerDeck[0];
+        const playerHand = drawnCard ? [...prev.playerHand, drawnCard] : prev.playerHand;
+        const playerDeck = drawnCard ? prev.playerDeck.slice(1) : prev.playerDeck;
+
         return {
           ...prev,
           isPlayerTurn: true,
+          playerHand,
+          playerDeck,
           playerMana: newMaxMana,
           maxPlayerMana: newMaxMana,
           opponentMana: newOpponentMaxMana,
@@ -334,8 +359,12 @@ export function GameProvider({ children }: { children: ReactNode }) {
 
       setState({
         playerHand: shuffled1.slice(0, 4),
+        playerDeck: shuffled1.slice(4),
         playerField: [],
+        playerGraveyard: [],
         opponentField: shuffled2.slice(0, 2).map(c => ({ ...c, canAttack: false })),
+        opponentDeck: shuffled2.slice(2),
+        opponentGraveyard: [],
         playerMana: 1,
         maxPlayerMana: 1,
         opponentMana: 1,
