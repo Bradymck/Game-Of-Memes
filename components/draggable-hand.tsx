@@ -181,6 +181,24 @@ interface DraggableHandProps {
 }
 
 export function DraggableHand({ cards, playerMana, isPlayerTurn, onPlayCard }: DraggableHandProps) {
+  const [newCardId, setNewCardId] = useState<string | null>(null);
+  const prevCardCountRef = useRef(cards.length);
+
+  // Detect when a new card is drawn
+  useEffect(() => {
+    if (cards.length > prevCardCountRef.current) {
+      // New card was drawn - it's the last one in the array
+      const lastCard = cards[cards.length - 1];
+      setNewCardId(lastCard.id);
+
+      // Clear animation after it completes
+      setTimeout(() => {
+        setNewCardId(null);
+      }, 600); // Match animation duration
+    }
+    prevCardCountRef.current = cards.length;
+  }, [cards.length, cards]);
+
   return (
     <div className="relative w-full h-full">
       {/* Horizontal Hand Zone - Compact bottom strip */}
@@ -195,10 +213,12 @@ export function DraggableHand({ cards, playerMana, isPlayerTurn, onPlayCard }: D
         // Initialize cards in horizontal row with slight offset
         const initialX = 10 + index * 32;
         const initialY = 8;
+        const isNewCard = card.id === newCardId;
 
         return (
           <div
             key={card.id}
+            className={cn(isNewCard && "animate-card-draw")}
             style={{
               position: 'absolute',
               left: initialX,

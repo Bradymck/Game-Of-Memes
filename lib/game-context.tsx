@@ -38,6 +38,8 @@ interface GameState {
   playerWon: boolean | null
   cardsPlayed: number
   damageDealt: number
+  lastDamage: { targetId: string | null; amount: number; timestamp: number } | null
+  dyingMinions: string[]
 }
 
 interface GameContextType extends GameState {
@@ -171,6 +173,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
     playerWon: null,
     cardsPlayed: 0,
     damageDealt: 0,
+    lastDamage: null,
+    dyingMinions: [],
   })
 
   // When user cards load, reset game with their cards for BOTH players
@@ -201,6 +205,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
         playerWon: null,
         cardsPlayed: 0,
         damageDealt: 0,
+        lastDamage: null,
+        dyingMinions: [],
       });
     }
   }, [userCards.length]); // Only when length changes (cards loaded)
@@ -244,26 +250,48 @@ export function GameProvider({ children }: { children: ReactNode }) {
       const newTargetHealth = target.health - attacker.attack
       const newAttackerHealth = attacker.health - target.attack
 
-      // Add dead minions to graveyard
-      const playerGraveyard = newAttackerHealth <= 0 ? [...prev.playerGraveyard, attacker] : prev.playerGraveyard
-      const opponentGraveyard = newTargetHealth <= 0 ? [...prev.opponentGraveyard, target] : prev.opponentGraveyard
+      console.log('[attackTarget] Attack!', {
+        attacker: attacker.name,
+        target: target.name,
+        damage: attacker.attack,
+        targetId
+      });
 
-      return {
+      // Mark dying minions instead of removing them immediately
+      const dyingMinions = [];
+      if (newAttackerHealth <= 0) dyingMinions.push(attacker.id);
+      if (newTargetHealth <= 0) dyingMinions.push(target.id);
+
+      const newState = {
         ...prev,
-        playerField:
-          newAttackerHealth <= 0
-            ? prev.playerField.filter((c) => c.id !== attacker.id)
-            : prev.playerField.map((c) =>
-                c.id === attacker.id ? { ...c, health: newAttackerHealth, canAttack: false } : c,
-              ),
-        opponentField:
-          newTargetHealth <= 0
-            ? prev.opponentField.filter((c) => c.id !== target.id)
-            : prev.opponentField.map((c) => (c.id === target.id ? { ...c, health: newTargetHealth } : c)),
-        playerGraveyard,
-        opponentGraveyard,
+        playerField: prev.playerField.map((c) =>
+          c.id === attacker.id ? { ...c, health: newAttackerHealth, canAttack: false } : c
+        ),
+        opponentField: prev.opponentField.map((c) =>
+          c.id === target.id ? { ...c, health: newTargetHealth } : c
+        ),
+        dyingMinions,
         selectedAttacker: null,
+        lastDamage: { targetId, amount: attacker.attack, timestamp: Date.now() },
+      };
+
+      console.log('[attackTarget] New lastDamage:', newState.lastDamage);
+
+      // After burn dissolve animation (1400ms), actually remove dead minions
+      if (dyingMinions.length > 0) {
+        setTimeout(() => {
+          setState((current) => ({
+            ...current,
+            playerField: current.playerField.filter((c) => c.health > 0),
+            opponentField: current.opponentField.filter((c) => c.health > 0),
+            playerGraveyard: newAttackerHealth <= 0 ? [...current.playerGraveyard, attacker] : current.playerGraveyard,
+            opponentGraveyard: newTargetHealth <= 0 ? [...current.opponentGraveyard, target] : current.opponentGraveyard,
+            dyingMinions: [],
+          }));
+        }, 1400); // Match burn animation duration
       }
+
+      return newState;
     })
   }, [])
 
@@ -291,6 +319,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
         damageDealt: newDamageDealt,
         gameOver: newOpponentHealth <= 0,
         playerWon: newOpponentHealth <= 0 ? true : null,
+        lastDamage: { targetId: null, amount: attacker.attack, timestamp: Date.now() }, // null targetId = hero
       }
     })
   }, [])
@@ -386,6 +415,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
         playerWon: null,
         cardsPlayed: 0,
         damageDealt: 0,
+        lastDamage: null,
+        dyingMinions: [],
       });
     }
   }, [userCards])

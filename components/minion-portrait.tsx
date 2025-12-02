@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from "react"
 import { cn } from "@/lib/utils"
+import { AttackEffect, VTTDamageNumber } from "@/components/attack-effects"
 import type { MemeCardData } from "@/lib/game-context"
 
 interface MinionPortraitProps {
@@ -11,6 +12,8 @@ interface MinionPortraitProps {
   canAttack?: boolean
   onClick?: () => void
   onDragAttack?: (targetId: string | null) => void // Called when dragged to a target
+  damageTaken?: number | null
+  isDying?: boolean
 }
 
 const rarityGlow = {
@@ -34,13 +37,32 @@ export function MinionPortrait({
   canAttack = false,
   onClick,
   onDragAttack,
+  damageTaken,
+  isDying = false,
 }: MinionPortraitProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [isOverTarget, setIsOverTarget] = useState(false);
   const [isAttacking, setIsAttacking] = useState(false);
+  const [showDamage, setShowDamage] = useState<number | null>(null);
+  const [showImpact, setShowImpact] = useState(false);
+  const [showAttackSprite, setShowAttackSprite] = useState(false);
   const startPosRef = useRef({ x: 0, y: 0 });
   const cardRef = useRef<HTMLDivElement>(null);
+
+  // Determine attack type based on rarity (for when THIS card attacks others)
+  const attackType = card.ability ? "ability" : (card.rarity === "common" || card.rarity === "rare" ? "melee" : "spell");
+
+  // Show damage numbers and impact effect when THIS card is damaged
+  useEffect(() => {
+    console.log(`[Minion ${card.id}] damageTaken changed:`, damageTaken);
+    if (damageTaken && damageTaken > 0) {
+      console.log(`[Minion ${card.id}] Showing damage:`, damageTaken);
+      setShowDamage(damageTaken);
+      setShowImpact(true);
+      setTimeout(() => setShowImpact(false), 400);
+    }
+  }, [damageTaken, card.id]);
 
   useEffect(() => {
     if (!isDragging) return;
@@ -106,9 +128,13 @@ export function MinionPortrait({
         if (targetCard || targetHero) {
           const targetElement = (targetCard || targetHero) as HTMLElement;
 
-          // Trigger attacker lunge animation
+          // Trigger attacker lunge animation + attack sprite
           setIsAttacking(true);
-          setTimeout(() => setIsAttacking(false), 400);
+          setShowAttackSprite(true);
+          setTimeout(() => {
+            setIsAttacking(false);
+            setShowAttackSprite(false);
+          }, 600);
 
           // Target shake animation
           targetElement.classList.add('animate-shake');
@@ -191,6 +217,7 @@ export function MinionPortrait({
         isSelected && "scale-110",
         !canAttack && "cursor-pointer",
         isAttacking && "animate-attack",
+        isDying && "animate-death-dissolve pointer-events-none",
       )}
       style={{
         transform: isDragging ? `translate(${dragOffset.x}px, ${dragOffset.y}px)` : undefined,
@@ -264,6 +291,33 @@ export function MinionPortrait({
       <div className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-gradient-to-b from-red-500 to-red-700 border-2 border-red-400 flex items-center justify-center shadow-md">
         <span className="text-white font-bold text-sm">{card.health}</span>
       </div>
+
+      {/* Attack Sprite when THIS card attacks */}
+      {showAttackSprite && (
+        <AttackEffect
+          type={attackType}
+          rarity={card.rarity}
+          onComplete={() => setShowAttackSprite(false)}
+        />
+      )}
+
+      {/* Impact Effect when THIS card is damaged */}
+      {showImpact && (
+        <AttackEffect
+          type="ability"
+          rarity={card.rarity}
+          onComplete={() => setShowImpact(false)}
+        />
+      )}
+
+      {/* VTT Damage Number */}
+      {showDamage && (
+        <VTTDamageNumber
+          damage={showDamage}
+          isCritical={card.rarity === "legendary"}
+          onComplete={() => setShowDamage(null)}
+        />
+      )}
     </div>
   )
 }

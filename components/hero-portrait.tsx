@@ -1,6 +1,8 @@
 "use client"
 
+import { useState, useEffect } from "react"
 import { cn } from "@/lib/utils"
+import { VTTDamageNumber } from "@/components/attack-effects"
 
 interface HeroPortraitProps {
   health: number
@@ -10,6 +12,7 @@ interface HeroPortraitProps {
   isTargetable?: boolean
   onClick?: () => void
   image?: string
+  damageTaken?: number | null
 }
 
 export function HeroPortrait({
@@ -20,10 +23,31 @@ export function HeroPortrait({
   isTargetable = false,
   onClick,
   image,
+  damageTaken,
 }: HeroPortraitProps) {
+  const [isShaking, setIsShaking] = useState(false)
+  const [showDamage, setShowDamage] = useState<number | null>(null)
+  const [showFlash, setShowFlash] = useState(false)
+
+  // Trigger animations when damage is taken
+  useEffect(() => {
+    if (damageTaken && damageTaken > 0) {
+      setIsShaking(true)
+      setShowDamage(damageTaken)
+      setShowFlash(true)
+
+      setTimeout(() => setIsShaking(false), 300)
+      setTimeout(() => setShowFlash(false), 200)
+    }
+  }, [damageTaken])
+
   return (
     <div
-      className={cn("relative flex flex-col items-center", isTargetable && "cursor-pointer")}
+      className={cn(
+        "relative flex flex-col items-center",
+        isTargetable && "cursor-pointer",
+        isShaking && "animate-shake"
+      )}
       onClick={onClick}
       data-hero-target={!isPlayer ? "true" : undefined}
       data-player-hero={isPlayer ? "true" : undefined}
@@ -92,6 +116,19 @@ export function HeroPortrait({
             </span>
           </div>
         </div>
+      )}
+
+      {/* Damage Flash Overlay */}
+      {showFlash && (
+        <div className="absolute inset-0 bg-red-500/50 rounded-full animate-pulse pointer-events-none" />
+      )}
+
+      {/* VTT Damage Number */}
+      {showDamage && (
+        <VTTDamageNumber
+          damage={showDamage}
+          onComplete={() => setShowDamage(null)}
+        />
       )}
     </div>
   )

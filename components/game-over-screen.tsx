@@ -1,9 +1,11 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { cn } from "@/lib/utils"
 import { recordWin, recordLoss } from "@/lib/soulContract"
+import { postGameResult } from "@/lib/xmtp"
 import { useSouls } from "@/hooks/useSouls"
+import { usePrivy } from "@privy-io/react-auth"
 
 interface GameOverScreenProps {
   playerWon: boolean
@@ -24,30 +26,56 @@ export function GameOverScreen({
 }: GameOverScreenProps) {
   const [recordingResult, setRecordingResult] = useState<'idle' | 'recording' | 'success' | 'error'>('idle');
   const { refreshStats } = useSouls();
+  const { user } = usePrivy();
+  const hasRecordedRef = useRef(false); // Prevent double-recording (React Strict Mode protection)
 
-  // Record match result on-chain when screen appears
+  // Record match result on-chain when screen appears (only once!)
   useEffect(() => {
     async function recordMatchResult() {
-      if (recordingResult !== 'idle') return; // Already recorded
+      // Double guard against React Strict Mode + state changes
+      if (hasRecordedRef.current || recordingResult !== 'idle') return;
 
+      hasRecordedRef.current = true;
       setRecordingResult('recording');
+
       try {
+        let txHash: string;
+
         if (playerWon) {
-          await recordWin();
+          // Record win for game state audit (no soul earned)
+          txHash = await recordWin();
         } else {
-          await recordLoss();
+          // Record loss and earn soul
+          txHash = await recordLoss();
         }
+
         setRecordingResult('success');
+
         // Refresh soul balance
         await refreshStats();
+
+        // Post result to XMTP (optional, don't fail if it errors)
+        if (user?.wallet?.address) {
+          await postGameResult({
+            playerWon,
+            playerHealth,
+            opponentHealth,
+            cardsPlayed,
+            damageDealt,
+            txHash,
+            playerAddress: user.wallet.address,
+          });
+        }
       } catch (error) {
         console.error('Failed to record match result:', error);
         setRecordingResult('error');
+        hasRecordedRef.current = false; // Allow retry on error
       }
     }
 
     recordMatchResult();
-  }, [playerWon, recordingResult, refreshStats]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Only run once when component mounts
 
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50">

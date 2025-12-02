@@ -26,7 +26,7 @@ export function useSouls() {
     setLoading(true);
     getSoulBalance(user.wallet.address)
       .then((balance) => {
-        setSouls(Number(balance));
+        setSouls(Number(balance) / 1e18); // Convert from wei to tokens
       })
       .catch((error) => {
         console.error('Failed to load soul balance:', error);

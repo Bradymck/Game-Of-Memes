@@ -1,13 +1,14 @@
 "use client"
 
-import { useMemo } from "react"
+import { useMemo, useEffect } from "react"
 import { useGame } from "@/lib/game-context"
 import { usePrivy } from "@privy-io/react-auth"
 import { HeroPortrait } from "@/components/hero-portrait"
 import { MinionPortrait } from "@/components/minion-portrait"
 import { DraggableHand } from "@/components/draggable-hand"
 import { GameOverScreen } from "@/components/game-over-screen"
-import { GameHeader } from "@/components/game-header"
+import { ChatMenu } from "@/components/chat-menu"
+import { ArcadeWalletButton } from "@/components/arcade-wallet-button"
 import MemeBackground from "@/components/meme-background"
 import { cn } from "@/lib/utils"
 
@@ -44,6 +45,8 @@ export function GameBoard() {
     playerWon,
     cardsPlayed,
     damageDealt,
+    lastDamage,
+    dyingMinions,
     selectCard,
     selectAttacker,
     attackTarget,
@@ -53,16 +56,20 @@ export function GameBoard() {
     resetGame,
   } = useGame()
 
+  // Debug logging for lastDamage
+  useEffect(() => {
+    if (lastDamage) {
+      console.log('[GameBoard] lastDamage changed:', lastDamage);
+    }
+  }, [lastDamage]);
+
   return (
     <div className="relative w-full h-screen overflow-hidden">
       {/* Epic 3D Meme Background! */}
       <MemeBackground />
 
-      {/* Header Bar */}
-      <GameHeader />
-
       {/* INSET Game Board - Pulled in from edges, room for decorations! */}
-      <div className="absolute inset-0 pt-20 pb-8 px-16 z-10">
+      <div className="absolute inset-0 pt-8 pb-8 px-16 z-10">
         {/* Game Table Surface */}
         <div className="relative h-full max-w-7xl mx-auto rounded-3xl border-4 border-amber-900/40 bg-gradient-to-b from-emerald-950/30 to-slate-900/50 shadow-2xl backdrop-blur-sm overflow-hidden">
 
@@ -115,6 +122,7 @@ export function GameBoard() {
                 isPlayer={false}
                 isTargetable={!!selectedAttacker}
                 onClick={() => selectedAttacker && attackHero()}
+                damageTaken={lastDamage?.targetId === null ? lastDamage.amount : null}
               />
 
               {/* Opponent Minions */}
@@ -128,6 +136,8 @@ export function GameBoard() {
                       card={card}
                       isTargetable={!!selectedAttacker}
                       onClick={() => selectedAttacker && attackTarget(card.id)}
+                      damageTaken={lastDamage?.targetId === card.id ? lastDamage.amount : null}
+                      isDying={dyingMinions.includes(card.id)}
                     />
                   ))
                 )}
@@ -258,6 +268,7 @@ export function GameBoard() {
                             }
                           }
                         }}
+                        isDying={dyingMinions.includes(card.id)}
                       />
                     ))}
                     <div className="absolute -top-6 text-red-400/70 text-xs font-bold">
@@ -286,6 +297,7 @@ export function GameBoard() {
                           }
                         }
                       }}
+                      isDying={dyingMinions.includes(card.id)}
                     />
                   ))
                 )}
@@ -335,6 +347,12 @@ export function GameBoard() {
           onPlayAgain={resetGame}
         />
       )}
+
+      {/* Chat/Social Menu - Bottom Left */}
+      <ChatMenu />
+
+      {/* Arcade Wallet Button - Bottom Right */}
+      <ArcadeWalletButton />
     </div>
   )
 }

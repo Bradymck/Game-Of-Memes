@@ -2,65 +2,60 @@ import { createPublicClient, createWalletClient, custom, http } from 'viem';
 import { base } from 'viem/chains';
 
 /**
- * Soul Contract Integration
+ * Unified Soul Token Integration (SoulTokenV2)
  *
- * Deployed at: 0x3Ab0e6481b8E91AfA24Ec4a158201034125b9F73
+ * Deployed at: 0xE391939D6061697f72D197792d2360c81204B7fe
  * Network: Base Mainnet
  *
  * The Reverse Loop:
- * - Lose match → Earn soul (future voting power)
- * - Win match → No soul (winners don't suffer!)
+ * - Lose match → recordGameLoss() → Earn 1 SOUL token (ERC20, soulbound)
+ * - Burn AquaPrime NFT → burnARIForSoul() → Earn 1 SOUL token
+ * - Souls used for voting across entire ecosystem
  * - Fully on-chain, zero centralization
  */
 
-const SOUL_CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_SOUL_CONTRACT_ADDRESS as `0x${string}`;
+const SOUL_CONTRACT_ADDRESS = '0xE391939D6061697f72D197792d2360c81204B7fe' as `0x${string}`;
 
 const SOUL_CONTRACT_ABI = [
+  // Game of Memes functions
   {
-    name: 'recordLoss',
+    name: 'recordGameLoss',
     type: 'function',
     stateMutability: 'nonpayable',
-    inputs: [{ name: 'gameId', type: 'bytes32' }],
+    inputs: [],
     outputs: [],
   },
   {
-    name: 'recordWin',
+    name: 'recordGameWin',
     type: 'function',
     stateMutability: 'nonpayable',
-    inputs: [{ name: 'gameId', type: 'bytes32' }],
+    inputs: [],
     outputs: [],
   },
   {
-    name: 'getSouls',
-    type: 'function',
-    stateMutability: 'view',
-    inputs: [{ name: 'player', type: 'address' }],
-    outputs: [{ type: 'uint256' }],
-  },
-  {
-    name: 'getStats',
+    name: 'getGameStats',
     type: 'function',
     stateMutability: 'view',
     inputs: [{ name: 'player', type: 'address' }],
     outputs: [
-      { name: 'soulBalance', type: 'uint256' },
-      { name: 'totalMatches', type: 'uint256' },
-      { name: 'totalWins', type: 'uint256' },
-      { name: 'totalLosses', type: 'uint256' },
+      { name: 'losses', type: 'uint256' },
+      { name: 'wins', type: 'uint256' },
+      { name: 'matches', type: 'uint256' },
       { name: 'winRate', type: 'uint256' },
     ],
   },
+  // ERC20 balance function
   {
-    name: 'souls',
+    name: 'balanceOf',
     type: 'function',
     stateMutability: 'view',
-    inputs: [{ name: '', type: 'address' }],
+    inputs: [{ name: 'account', type: 'address' }],
     outputs: [{ type: 'uint256' }],
   },
 ] as const;
 
 /**
- * Get soul balance for an address
+ * Get soul balance for an address (ERC20 balance)
  */
 export async function getSoulBalance(address: string): Promise<bigint> {
   const client = createPublicClient({
@@ -71,7 +66,7 @@ export async function getSoulBalance(address: string): Promise<bigint> {
   const balance = await client.readContract({
     address: SOUL_CONTRACT_ADDRESS,
     abi: SOUL_CONTRACT_ABI,
-    functionName: 'getSouls',
+    functionName: 'balanceOf',
     args: [address as `0x${string}`],
   });
 
@@ -79,7 +74,7 @@ export async function getSoulBalance(address: string): Promise<bigint> {
 }
 
 /**
- * Get player stats (souls, wins, losses, win rate)
+ * Get player game stats (wins, losses, win rate)
  */
 export async function getPlayerStats(address: string) {
   const client = createPublicClient({
@@ -87,26 +82,31 @@ export async function getPlayerStats(address: string) {
     transport: http(),
   });
 
-  const [soulBalance, totalMatches, totalWins, totalLosses, winRate] = await client.readContract({
+  const result = await client.readContract({
     address: SOUL_CONTRACT_ADDRESS,
     abi: SOUL_CONTRACT_ABI,
-    functionName: 'getStats',
+    functionName: 'getGameStats',
     args: [address as `0x${string}`],
   });
 
+  const [losses, wins, matches, winRate] = result as readonly [bigint, bigint, bigint, bigint];
+
+  // Also get soul balance
+  const soulBalance = await getSoulBalance(address);
+
   return {
-    souls: Number(soulBalance),
-    matches: Number(totalMatches),
-    wins: Number(totalWins),
-    losses: Number(totalLosses),
+    souls: Number(soulBalance) / 1e18, // Convert from wei to tokens
+    matches: Number(matches),
+    wins: Number(wins),
+    losses: Number(losses),
     winRate: Number(winRate) / 100, // Convert from basis points to percentage
   };
 }
 
 /**
- * Record a loss and earn a soul
+ * Record a loss and earn a soul (instant mint)
  */
-export async function recordLoss(gameId: string = '0x0'): Promise<string> {
+export async function recordLoss(): Promise<string> {
   // Switch to Base mainnet if needed
   try {
     await (window as any).ethereum.request({
@@ -136,14 +136,11 @@ export async function recordLoss(gameId: string = '0x0'): Promise<string> {
 
   const [account] = await walletClient.getAddresses();
 
-  // Convert gameId to bytes32 (pad with zeros if needed)
-  const gameIdBytes32 = gameId.padEnd(66, '0') as `0x${string}`;
-
   const hash = await walletClient.writeContract({
     address: SOUL_CONTRACT_ADDRESS,
     abi: SOUL_CONTRACT_ABI,
-    functionName: 'recordLoss',
-    args: [gameIdBytes32],
+    functionName: 'recordGameLoss',
+    args: [],
     account,
   });
 
@@ -151,9 +148,9 @@ export async function recordLoss(gameId: string = '0x0'): Promise<string> {
 }
 
 /**
- * Record a win (no soul earned)
+ * Record a win (no soul earned, just tracking)
  */
-export async function recordWin(gameId: string = '0x0'): Promise<string> {
+export async function recordWin(): Promise<string> {
   const walletClient = createWalletClient({
     chain: base,
     transport: custom((window as any).ethereum),
@@ -161,13 +158,11 @@ export async function recordWin(gameId: string = '0x0'): Promise<string> {
 
   const [account] = await walletClient.getAddresses();
 
-  const gameIdBytes32 = gameId.padEnd(66, '0') as `0x${string}`;
-
   const hash = await walletClient.writeContract({
     address: SOUL_CONTRACT_ADDRESS,
     abi: SOUL_CONTRACT_ABI,
-    functionName: 'recordWin',
-    args: [gameIdBytes32],
+    functionName: 'recordGameWin',
+    args: [],
     account,
   });
 
