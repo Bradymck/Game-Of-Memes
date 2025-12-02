@@ -8,6 +8,7 @@ import { MinionPortrait } from "@/components/minion-portrait"
 import { DraggableHand } from "@/components/draggable-hand"
 import { GameOverScreen } from "@/components/game-over-screen"
 import { GameHeader } from "@/components/game-header"
+import MemeBackground from "@/components/meme-background"
 import { cn } from "@/lib/utils"
 
 export function GameBoard() {
@@ -54,29 +55,19 @@ export function GameBoard() {
 
   return (
     <div className="relative w-full h-screen overflow-hidden">
-      {/* 3D Background Placeholder (room for future Three.js scene!) */}
-      <div className="absolute inset-0 bg-gradient-to-b from-slate-950 via-purple-950/20 to-slate-950" />
-
-      {/* Animated particle field (fake 3D depth) */}
-      <div className="absolute inset-0 opacity-20">
-        <div className="absolute top-20 left-20 w-2 h-2 bg-purple-400 rounded-full blur-sm animate-pulse" />
-        <div className="absolute top-40 right-32 w-1 h-1 bg-pink-400 rounded-full blur-sm animate-pulse" style={{ animationDelay: '1s' }} />
-        <div className="absolute bottom-40 left-1/4 w-1.5 h-1.5 bg-blue-400 rounded-full blur-sm animate-pulse" style={{ animationDelay: '2s' }} />
-        <div className="absolute top-60 right-1/4 w-1 h-1 bg-purple-300 rounded-full blur-sm animate-pulse" style={{ animationDelay: '1.5s' }} />
-      </div>
+      {/* Epic 3D Meme Background! */}
+      <MemeBackground />
 
       {/* Header Bar */}
       <GameHeader />
 
       {/* INSET Game Board - Pulled in from edges, room for decorations! */}
-      <div className="absolute inset-0 pt-20 pb-8 px-16">
+      <div className="absolute inset-0 pt-20 pb-8 px-16 z-10">
         {/* Game Table Surface */}
         <div className="relative h-full max-w-7xl mx-auto rounded-3xl border-4 border-amber-900/40 bg-gradient-to-b from-emerald-950/30 to-slate-900/50 shadow-2xl backdrop-blur-sm overflow-hidden">
-          {/* Table texture */}
-          <div className="absolute inset-0 opacity-10 bg-[url('/wood-texture.jpg')] bg-cover mix-blend-overlay" />
 
           {/* Content Grid */}
-          <div className="relative h-full grid grid-rows-[1fr_auto_1fr] grid-cols-[140px_1fr_140px] gap-4 p-8">
+          <div className="relative h-full grid grid-rows-[1fr_auto_1fr] grid-cols-[140px_1fr_140px] gap-4 p-8 z-20">
 
             {/* ========== TOP ROW: Opponent Area ========== */}
 
@@ -122,8 +113,8 @@ export function GameBoard() {
                 mana={opponentMana}
                 maxMana={maxOpponentMana}
                 isPlayer={false}
-                isTargetable={!!selectedAttacker && opponentField.length === 0}
-                onClick={() => selectedAttacker && opponentField.length === 0 && attackHero()}
+                isTargetable={!!selectedAttacker}
+                onClick={() => selectedAttacker && attackHero()}
               />
 
               {/* Opponent Minions */}

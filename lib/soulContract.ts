@@ -107,6 +107,28 @@ export async function getPlayerStats(address: string) {
  * Record a loss and earn a soul
  */
 export async function recordLoss(gameId: string = '0x0'): Promise<string> {
+  // Switch to Base mainnet if needed
+  try {
+    await (window as any).ethereum.request({
+      method: 'wallet_switchEthereumChain',
+      params: [{ chainId: '0x2105' }], // Base mainnet (8453)
+    });
+  } catch (error: any) {
+    // Chain doesn't exist, add it
+    if (error.code === 4902) {
+      await (window as any).ethereum.request({
+        method: 'wallet_addEthereumChain',
+        params: [{
+          chainId: '0x2105',
+          chainName: 'Base',
+          nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+          rpcUrls: ['https://mainnet.base.org'],
+          blockExplorerUrls: ['https://basescan.org'],
+        }],
+      });
+    }
+  }
+
   const walletClient = createWalletClient({
     chain: base,
     transport: custom((window as any).ethereum),

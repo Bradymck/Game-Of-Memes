@@ -38,6 +38,7 @@ export function MinionPortrait({
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [isOverTarget, setIsOverTarget] = useState(false);
+  const [isAttacking, setIsAttacking] = useState(false);
   const startPosRef = useRef({ x: 0, y: 0 });
   const cardRef = useRef<HTMLDivElement>(null);
 
@@ -104,17 +105,24 @@ export function MinionPortrait({
         // Attack animation!
         if (targetCard || targetHero) {
           const targetElement = (targetCard || targetHero) as HTMLElement;
-          // Quick shake + flash
+
+          // Trigger attacker lunge animation
+          setIsAttacking(true);
+          setTimeout(() => setIsAttacking(false), 400);
+
+          // Target shake animation
           targetElement.classList.add('animate-shake');
           setTimeout(() => targetElement.classList.remove('animate-shake'), 300);
 
-          // Execute attack
-          if (targetCard) {
-            const targetId = targetCard.getAttribute('data-minion-id');
-            onDragAttack(targetId);
-          } else if (targetHero) {
-            onDragAttack(null); // null = attack hero
-          }
+          // Execute attack after animation starts
+          setTimeout(() => {
+            if (targetCard) {
+              const targetId = targetCard.getAttribute('data-minion-id');
+              onDragAttack(targetId);
+            } else if (targetHero) {
+              onDragAttack(null); // null = attack hero
+            }
+          }, 200);
         }
       } else if (!canAttack && (targetCard || targetHero)) {
         // Can't attack - just do click behavior
@@ -139,13 +147,37 @@ export function MinionPortrait({
     if (!canAttack) return;
 
     e.preventDefault();
+    e.stopPropagation();
     startPosRef.current = { x: e.clientX, y: e.clientY };
-    setIsDragging(true);
+
+    // Don't set isDragging yet - wait for movement in handleMouseMove
+    // This allows clicks to work without being treated as drags
+
+    const handleInitialMove = (moveEvent: MouseEvent) => {
+      const dx = moveEvent.clientX - startPosRef.current.x;
+      const dy = moveEvent.clientY - startPosRef.current.y;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+
+      if (distance > 5) {
+        // Actual drag detected
+        setIsDragging(true);
+        document.removeEventListener('mousemove', handleInitialMove);
+      }
+    };
+
+    const handleInitialUp = () => {
+      document.removeEventListener('mousemove', handleInitialMove);
+      document.removeEventListener('mouseup', handleInitialUp);
+    };
+
+    document.addEventListener('mousemove', handleInitialMove);
+    document.addEventListener('mouseup', handleInitialUp);
   };
 
-  const handleClick = () => {
-    // If dragging was initiated, don't trigger click
+  const handleClick = (e: React.MouseEvent) => {
+    // Only trigger click if we're not in the middle of dragging
     if (isDragging) return;
+    e.stopPropagation();
     onClick?.();
   };
 
@@ -155,9 +187,10 @@ export function MinionPortrait({
       className={cn(
         "relative transition-all duration-200 group",
         canAttack && !isDragging && "cursor-grab hover:scale-110",
-        isDragging && "cursor-grabbing scale-125",
+        isDragging && "cursor-grabbing scale-125 pointer-events-none",
         isSelected && "scale-110",
         !canAttack && "cursor-pointer",
+        isAttacking && "animate-attack",
       )}
       style={{
         transform: isDragging ? `translate(${dragOffset.x}px, ${dragOffset.y}px)` : undefined,

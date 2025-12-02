@@ -25,7 +25,7 @@ export function HeroPortrait({
     <div
       className={cn("relative flex flex-col items-center", isTargetable && "cursor-pointer")}
       onClick={onClick}
-      data-hero-target={isTargetable ? "true" : undefined}
+      data-hero-target={!isPlayer ? "true" : undefined}
       data-player-hero={isPlayer ? "true" : undefined}
     >
       {/* Hero Frame - Bigger! */}

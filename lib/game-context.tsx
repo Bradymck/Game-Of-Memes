@@ -273,6 +273,13 @@ export function GameProvider({ children }: { children: ReactNode }) {
       const attacker = prev.playerField.find((c) => c.id === prev.selectedAttacker)
       if (!attacker) return prev
 
+      // Check for taunt - can't attack hero if opponent has minions (unless attacker has special ability later)
+      const hasTauntBlockers = prev.opponentField.length > 0
+      if (hasTauntBlockers) {
+        // TODO: Later add check for abilities that bypass taunt
+        return prev // Can't attack hero while minions are blocking
+      }
+
       const newOpponentHealth = prev.opponentHealth - attacker.attack
       const newDamageDealt = prev.damageDealt + attacker.attack
 
