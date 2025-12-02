@@ -6,7 +6,7 @@ An NFT card game where players vote on card balance, and losers have the power t
 
 ## Current Features (v0.1 - Prototype)
 
-- ✅ Basic card game mechanics
+- ✅ Basic card game mechanics 🧰
 - ✅ Turn-based gameplay
 - ✅ Mana system (1-10)
 - ✅ Card playing from hand to board
