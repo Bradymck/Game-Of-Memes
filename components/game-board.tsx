@@ -1,0 +1,322 @@
+"use client"
+
+import { useGame } from "@/lib/game-context"
+import { usePrivy } from "@privy-io/react-auth"
+import { HeroPortrait } from "@/components/hero-portrait"
+import { MinionPortrait } from "@/components/minion-portrait"
+import { DraggableHand } from "@/components/draggable-hand"
+import { GameOverScreen } from "@/components/game-over-screen"
+import { GameHeader } from "@/components/game-header"
+import { cn } from "@/lib/utils"
+
+export function GameBoard() {
+  const { user } = usePrivy();
+  const {
+    playerHand,
+    playerField,
+    opponentField,
+    playerMana,
+    maxPlayerMana,
+    opponentMana,
+    maxOpponentMana,
+    playerHealth,
+    opponentHealth,
+    selectedCard,
+    selectedAttacker,
+    isPlayerTurn,
+    gameOver,
+    playerWon,
+    cardsPlayed,
+    damageDealt,
+    selectCard,
+    selectAttacker,
+    attackTarget,
+    attackHero,
+    playCard,
+    endTurn,
+    resetGame,
+  } = useGame()
+
+  return (
+    <div className="relative w-full h-screen overflow-hidden">
+      {/* 3D Background Placeholder (room for future Three.js scene!) */}
+      <div className="absolute inset-0 bg-gradient-to-b from-slate-950 via-purple-950/20 to-slate-950" />
+
+      {/* Animated particle field (fake 3D depth) */}
+      <div className="absolute inset-0 opacity-20">
+        <div className="absolute top-20 left-20 w-2 h-2 bg-purple-400 rounded-full blur-sm animate-pulse" />
+        <div className="absolute top-40 right-32 w-1 h-1 bg-pink-400 rounded-full blur-sm animate-pulse" style={{ animationDelay: '1s' }} />
+        <div className="absolute bottom-40 left-1/4 w-1.5 h-1.5 bg-blue-400 rounded-full blur-sm animate-pulse" style={{ animationDelay: '2s' }} />
+        <div className="absolute top-60 right-1/4 w-1 h-1 bg-purple-300 rounded-full blur-sm animate-pulse" style={{ animationDelay: '1.5s' }} />
+      </div>
+
+      {/* Header Bar */}
+      <GameHeader />
+
+      {/* INSET Game Board - Pulled in from edges, room for decorations! */}
+      <div className="absolute inset-0 pt-20 pb-8 px-16">
+        {/* Game Table Surface */}
+        <div className="relative h-full max-w-7xl mx-auto rounded-3xl border-4 border-amber-900/40 bg-gradient-to-b from-emerald-950/30 to-slate-900/50 shadow-2xl backdrop-blur-sm overflow-hidden">
+          {/* Table texture */}
+          <div className="absolute inset-0 opacity-10 bg-[url('/wood-texture.jpg')] bg-cover mix-blend-overlay" />
+
+          {/* Content Grid */}
+          <div className="relative h-full grid grid-rows-[1fr_auto_1fr] grid-cols-[140px_1fr_140px] gap-4 p-8">
+
+            {/* ========== TOP ROW: Opponent Area ========== */}
+
+            {/* Opponent Deck (Top Left) - BIGGER, MESSY PILE! */}
+            <div className="row-start-1 col-start-1 flex items-start justify-center pt-4">
+              <div className="relative w-20 h-28">
+                {[...Array(12)].map((_, i) => {
+                  const randomRotation = (Math.random() - 0.5) * 8; // Random tilt
+                  const randomX = (Math.random() - 0.5) * 4;
+                  const randomY = (Math.random() - 0.5) * 4;
+                  return (
+                    <div
+                      key={i}
+                      className="absolute w-20 h-28 rounded-lg overflow-hidden border-2 border-purple-600 shadow-lg"
+                      style={{
+                        bottom: i * 1.5 + randomY,
+                        left: i * 0.5 + randomX,
+                        rotate: `${randomRotation}deg`,
+                        zIndex: 12 - i,
+                      }}
+                    >
+                      <img src="/vibe.png" alt="card back" className="w-full h-full object-cover" />
+                    </div>
+                  );
+                })}
+                <div className="absolute -bottom-6 left-1/2 -translate-x-1/2 text-amber-100/70 font-bold text-sm drop-shadow">
+                  18
+                </div>
+              </div>
+            </div>
+
+            {/* Opponent Center (Hero + Minions) */}
+            <div className="row-start-1 col-start-2 flex flex-col items-center justify-start gap-6 pt-4">
+              {/* Opponent Hero */}
+              <HeroPortrait
+                health={opponentHealth}
+                mana={opponentMana}
+                maxMana={maxOpponentMana}
+                isPlayer={false}
+                isTargetable={!!selectedAttacker && opponentField.length === 0}
+                onClick={() => selectedAttacker && opponentField.length === 0 && attackHero()}
+              />
+
+              {/* Opponent Minions */}
+              <div className="flex items-center justify-center gap-3 min-h-[120px]">
+                {opponentField.length === 0 ? (
+                  <div className="text-amber-100/30 text-sm italic">No minions</div>
+                ) : (
+                  opponentField.map((card) => (
+                    <MinionPortrait
+                      key={card.id}
+                      card={card}
+                      isTargetable={!!selectedAttacker}
+                      onClick={() => selectedAttacker && attackTarget(card.id)}
+                    />
+                  ))
+                )}
+              </div>
+            </div>
+
+            {/* Opponent Hand (Top Right) - MIRRORED TO LEFT! */}
+            <div className="row-start-1 col-start-3 flex items-start justify-center pt-8">
+              <div className="relative h-32 w-24">
+                {[...Array(4)].map((_, i) => {
+                  // Fan out to the LEFT (mirror of player hand)
+                  const rotation = (1.5 - i) * 12; // Reversed fan
+                  const xOffset = (1.5 - i) * -8;
+                  return (
+                    <div
+                      key={i}
+                      className="absolute w-20 h-28 rounded-lg border-2 border-red-600/60 overflow-hidden shadow-lg"
+                      style={{
+                        transform: `translateX(${xOffset}px) rotate(${rotation}deg)`,
+                        transformOrigin: 'bottom center',
+                        zIndex: 4 - i,
+                        top: i * 3,
+                      }}
+                    >
+                      <img src="/vibe.png" alt="opponent card" className="w-full h-full object-cover" />
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* ========== MIDDLE ROW: Battle Line ========== */}
+
+            <div className="row-start-2 col-span-3 h-16 flex items-center justify-center relative">
+              {/* Epic battle line */}
+              <div className="absolute inset-x-12 h-1 bg-gradient-to-r from-transparent via-amber-500/60 to-transparent shadow-lg shadow-amber-500/30" />
+
+              {/* Center gem */}
+              <div className="relative z-10 w-14 h-14 rounded-full bg-gradient-to-b from-amber-500 to-amber-800 border-3 border-amber-300 flex items-center justify-center shadow-xl">
+                <span className="text-white text-2xl drop-shadow-lg">⚔️</span>
+              </div>
+
+              {/* End Turn Button */}
+              <div className="absolute right-8">
+                <button
+                  onClick={endTurn}
+                  disabled={!isPlayerTurn}
+                  className={cn(
+                    "px-6 py-3 rounded-xl font-bold text-sm uppercase tracking-wider transition-all",
+                    "border-3 shadow-xl",
+                    isPlayerTurn
+                      ? "bg-gradient-to-b from-green-500 to-green-700 border-green-400 text-white hover:from-green-400 hover:to-green-600 hover:scale-105 active:scale-95"
+                      : "bg-gradient-to-b from-stone-700 to-stone-900 border-stone-600 text-stone-500 cursor-not-allowed",
+                  )}
+                >
+                  {isPlayerTurn ? "End Turn" : "Enemy Turn..."}
+                </button>
+              </div>
+            </div>
+
+            {/* ========== BOTTOM ROW: Player Area ========== */}
+
+            {/* Player Deck (Bottom Left) - BIGGER, MESSY PILE! */}
+            <div className="row-start-3 col-start-1 flex items-end justify-center pb-4">
+              <div className="relative w-20 h-28">
+                {[...Array(12)].map((_, i) => {
+                  const randomRotation = (Math.random() - 0.5) * 8;
+                  const randomX = (Math.random() - 0.5) * 4;
+                  const randomY = (Math.random() - 0.5) * 4;
+                  return (
+                    <div
+                      key={i}
+                      className="absolute w-20 h-28 rounded-lg overflow-hidden border-2 border-purple-600 shadow-lg"
+                      style={{
+                        bottom: i * 1.5 + randomY,
+                        left: i * 0.5 + randomX,
+                        rotate: `${randomRotation}deg`,
+                        zIndex: 12 - i,
+                      }}
+                    >
+                      <img src="/vibe.png" alt="card back" className="w-full h-full object-cover" />
+                    </div>
+                  );
+                })}
+                <div className="absolute -bottom-6 left-1/2 -translate-x-1/2 text-amber-100/70 font-bold text-sm drop-shadow">
+                  18
+                </div>
+              </div>
+            </div>
+
+            {/* Player Center (Minions + Hero) */}
+            <div className="row-start-3 col-start-2 flex flex-col items-center justify-end gap-6 pb-4">
+              {/* Player Minions - FULL WIDTH DROP ZONE */}
+              <div
+                className="flex items-center justify-center gap-3 min-h-[120px] w-full px-4 py-6 rounded-xl transition-all border-2 border-dashed border-transparent"
+                data-play-field="true"
+              >
+                {playerField.length === 0 ? (
+                  <div className="text-amber-100/30 text-sm italic">
+                    {selectedCard ? "Drop here to play" : "No minions"}
+                  </div>
+                ) : playerField.length >= 7 ? (
+                  <>
+                    {playerField.map((card) => (
+                      <MinionPortrait
+                        key={card.id}
+                        card={card}
+                        isSelected={selectedAttacker === card.id}
+                        canAttack={card.canAttack && isPlayerTurn}
+                        onClick={() => {
+                          if (card.canAttack && isPlayerTurn) {
+                            selectAttacker(selectedAttacker === card.id ? null : card.id)
+                          }
+                        }}
+                        onDragAttack={(targetId) => {
+                          if (card.canAttack && isPlayerTurn) {
+                            selectAttacker(card.id);
+                            if (targetId) {
+                              attackTarget(targetId);
+                            } else {
+                              attackHero();
+                            }
+                          }
+                        }}
+                      />
+                    ))}
+                    <div className="absolute -top-6 text-red-400/70 text-xs font-bold">
+                      Board Full! (7/7)
+                    </div>
+                  </>
+                ) : (
+                  playerField.map((card) => (
+                    <MinionPortrait
+                      key={card.id}
+                      card={card}
+                      isSelected={selectedAttacker === card.id}
+                      canAttack={card.canAttack && isPlayerTurn}
+                      onClick={() => {
+                        if (card.canAttack && isPlayerTurn) {
+                          selectAttacker(selectedAttacker === card.id ? null : card.id)
+                        }
+                      }}
+                      onDragAttack={(targetId) => {
+                        if (card.canAttack && isPlayerTurn) {
+                          selectAttacker(card.id);
+                          if (targetId) {
+                            attackTarget(targetId);
+                          } else {
+                            attackHero(); // Dragged to empty space = attack hero
+                          }
+                        }
+                      }}
+                    />
+                  ))
+                )}
+              </div>
+
+              {/* Player Hero */}
+              <HeroPortrait
+                health={playerHealth}
+                mana={playerMana}
+                maxMana={maxPlayerMana}
+                isPlayer
+                image={user?.wallet?.address ? `https://metadata.ens.domains/mainnet/avatar/${user.wallet.address.toLowerCase()}` : undefined}
+              />
+            </div>
+
+          </div>
+
+          {/* Player Hand Zone - OUTSIDE GRID, Bottom Right Corner */}
+          <div className="absolute bottom-12 right-2 w-96 h-28 z-20">
+            <DraggableHand
+              cards={playerHand}
+              playerMana={playerMana}
+              isPlayerTurn={isPlayerTurn}
+              onPlayCard={playCard}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Attack Mode Indicator */}
+      {selectedAttacker && (
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none z-50">
+          <div className="bg-red-900/95 text-red-100 px-6 py-3 rounded-xl border-2 border-red-500 font-bold text-base animate-pulse shadow-2xl">
+            Drag to target or click enemy to attack
+          </div>
+        </div>
+      )}
+
+      {/* Game Over Screen */}
+      {gameOver && playerWon !== null && (
+        <GameOverScreen
+          playerWon={playerWon}
+          playerHealth={playerHealth}
+          opponentHealth={opponentHealth}
+          cardsPlayed={cardsPlayed}
+          damageDealt={damageDealt}
+          onPlayAgain={resetGame}
+        />
+      )}
+    </div>
+  )
+}
