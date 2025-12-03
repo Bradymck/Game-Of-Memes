@@ -2,6 +2,8 @@
 
 import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from "react"
 import { useVibeMarketCards } from "@/hooks/useVibeMarketCards"
+import { logGameAction } from "@/lib/xmtp"
+import { usePrivy } from "@privy-io/react-auth"
 
 export interface MemeCardData {
   id: string
@@ -138,6 +140,7 @@ const GameContext = createContext<GameContextType | null>(null)
 
 export function GameProvider({ children }: { children: ReactNode }) {
   const { cards: userCards, loading: cardsLoading } = useVibeMarketCards();
+  const { user } = usePrivy();
 
   // Ghost loading cards (ethereal placeholders while NFTs load)
   const ghostCards: MemeCardData[] = Array.from({ length: 4 }, (_, i) => ({
@@ -216,6 +219,15 @@ export function GameProvider({ children }: { children: ReactNode }) {
       const card = prev.playerHand.find((c) => c.id === cardId)
       if (!card || card.mana > prev.playerMana || prev.playerField.length >= 7) return prev
 
+      // Log action to chat
+      if (user?.wallet?.address) {
+        logGameAction({
+          type: 'play_card',
+          actor: user.wallet.address,
+          data: { cardName: card.name, mana: card.mana }
+        }, user.wallet.address);
+      }
+
       return {
         ...prev,
         playerHand: prev.playerHand.filter((c) => c.id !== cardId),
@@ -225,7 +237,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
         cardsPlayed: prev.cardsPlayed + 1,
       }
     })
-  }, [])
+  }, [user?.wallet?.address])
 
   const selectCard = useCallback((cardId: string | null) => {
     setState((prev) => ({ ...prev, selectedCard: cardId, selectedAttacker: null }))
@@ -250,12 +262,14 @@ export function GameProvider({ children }: { children: ReactNode }) {
       const newTargetHealth = target.health - attacker.attack
       const newAttackerHealth = attacker.health - target.attack
 
-      console.log('[attackTarget] Attack!', {
-        attacker: attacker.name,
-        target: target.name,
-        damage: attacker.attack,
-        targetId
-      });
+      // Log attack to chat
+      if (user?.wallet?.address) {
+        logGameAction({
+          type: 'attack_minion',
+          actor: user.wallet.address,
+          data: { attacker: attacker.name, target: target.name, damage: attacker.attack }
+        }, user.wallet.address);
+      }
 
       // Mark dying minions instead of removing them immediately
       const dyingMinions = [];
@@ -277,7 +291,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
 
       console.log('[attackTarget] New lastDamage:', newState.lastDamage);
 
-      // After burn dissolve animation (1400ms), actually remove dead minions
+      // After burn dissolve animation (1200ms), actually remove dead minions
       if (dyingMinions.length > 0) {
         setTimeout(() => {
           setState((current) => ({
@@ -288,12 +302,12 @@ export function GameProvider({ children }: { children: ReactNode }) {
             opponentGraveyard: newTargetHealth <= 0 ? [...current.opponentGraveyard, target] : current.opponentGraveyard,
             dyingMinions: [],
           }));
-        }, 1400); // Match burn animation duration
+        }, 1200); // Match burn animation duration
       }
 
       return newState;
     })
-  }, [])
+  }, [user?.wallet?.address])
 
   const attackHero = useCallback(() => {
     setState((prev) => {
@@ -311,6 +325,15 @@ export function GameProvider({ children }: { children: ReactNode }) {
       const newOpponentHealth = prev.opponentHealth - attacker.attack
       const newDamageDealt = prev.damageDealt + attacker.attack
 
+      // Log hero attack
+      if (user?.wallet?.address) {
+        logGameAction({
+          type: 'attack_hero',
+          actor: user.wallet.address,
+          data: { attacker: attacker.name, damage: attacker.attack }
+        }, user.wallet.address);
+      }
+
       return {
         ...prev,
         opponentHealth: newOpponentHealth,
@@ -322,9 +345,18 @@ export function GameProvider({ children }: { children: ReactNode }) {
         lastDamage: { targetId: null, amount: attacker.attack, timestamp: Date.now() }, // null targetId = hero
       }
     })
-  }, [])
+  }, [user?.wallet?.address])
 
   const endTurn = useCallback(() => {
+    // Log end turn
+    if (user?.wallet?.address) {
+      logGameAction({
+        type: 'end_turn',
+        actor: user.wallet.address,
+        data: {}
+      }, user.wallet.address);
+    }
+
     setState((prev) => ({
       ...prev,
       isPlayerTurn: false,
@@ -340,6 +372,16 @@ export function GameProvider({ children }: { children: ReactNode }) {
         const attackedMinions = prev.opponentField.map(minion => {
           if (minion.canAttack) {
             playerHealth -= minion.attack; // Attack player directly
+
+            // Log AI attack
+            if (user?.wallet?.address) {
+              logGameAction({
+                type: 'attack_hero',
+                actor: 'AI',
+                data: { attacker: minion.name, damage: minion.attack }
+              }, user.wallet.address);
+            }
+
             return { ...minion, canAttack: false };
           }
           return minion;
@@ -366,16 +408,35 @@ export function GameProvider({ children }: { children: ReactNode }) {
         const newMaxMana = Math.min(10, prev.maxPlayerMana + 1);
         const newOpponentMaxMana = Math.min(10, prev.maxOpponentMana + 1);
 
-        // Draw a card from player deck (if any left)
-        const drawnCard = prev.playerDeck[0];
+        // Draw a card from player deck (if any left, else recycle graveyard)
+        let playerDeck = prev.playerDeck;
+        let playerGraveyard = prev.playerGraveyard;
+
+        // If deck is empty, shuffle graveyard back into deck
+        if (playerDeck.length === 0 && playerGraveyard.length > 0) {
+          playerDeck = [...playerGraveyard].sort(() => Math.random() - 0.5);
+          playerGraveyard = [];
+        }
+
+        const drawnCard = playerDeck[0];
         const playerHand = drawnCard ? [...prev.playerHand, drawnCard] : prev.playerHand;
-        const playerDeck = drawnCard ? prev.playerDeck.slice(1) : prev.playerDeck;
+        playerDeck = drawnCard ? playerDeck.slice(1) : playerDeck;
+
+        // Log card draw
+        if (drawnCard && user?.wallet?.address) {
+          logGameAction({
+            type: 'card_draw',
+            actor: user.wallet.address,
+            data: { cardName: drawnCard.name }
+          }, user.wallet.address);
+        }
 
         return {
           ...prev,
           isPlayerTurn: true,
           playerHand,
           playerDeck,
+          playerGraveyard,
           playerMana: newMaxMana,
           maxPlayerMana: newMaxMana,
           opponentMana: newOpponentMaxMana,
@@ -386,7 +447,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
         }
       })
     }, 2000)
-  }, [])
+  }, [user?.wallet?.address])
 
   const resetGame = useCallback(() => {
     if (userCards.length > 0) {

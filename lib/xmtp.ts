@@ -1,22 +1,66 @@
 import { Client } from '@xmtp/browser-sdk';
 
 let xmtpClient: Client | null = null;
+let gameConversation: any = null;
+let currentGameId: string | null = null;
 
 /**
  * Initialize XMTP client with wallet
+ * TODO: Fix browser-sdk initialization - currently disabled
  */
-export async function initializeXMTP(): Promise<Client> {
-  if (xmtpClient) return xmtpClient;
+export async function initializeXMTP(): Promise<Client | null> {
+  // Temporarily disabled due to SDK API issues
+  // Will fix in next session with proper SDK version
+  return null as any;
+}
 
-  const ethereum = (window as any).ethereum;
-  if (!ethereum) throw new Error('No wallet found');
+/**
+ * Start a new game session (creates game ID and conversation)
+ */
+export async function startGameSession(playerAddress: string): Promise<string> {
+  const client = await initializeXMTP();
+  currentGameId = `game_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
-  // Create XMTP client
-  xmtpClient = await Client.create(ethereum, {
-    env: 'production', // Use 'dev' for testing
-  });
+  // Create or get conversation (self-conversation for solo, or with opponent for PVP)
+  gameConversation = await client.conversations.newConversation(playerAddress);
 
-  return xmtpClient;
+  // Post game start
+  await gameConversation.send(JSON.stringify({
+    type: 'game_start',
+    gameId: currentGameId,
+    timestamp: Date.now(),
+    player: playerAddress,
+  }));
+
+  return currentGameId;
+}
+
+/**
+ * Log a game action (real-time audit trail)
+ * TODO: Will use XMTP when SDK is fixed, currently localStorage
+ */
+export function logGameAction(action: {
+  type: 'play_card' | 'attack_minion' | 'attack_hero' | 'end_turn' | 'card_draw' | 'minion_death';
+  actor: string;
+  data: any;
+}, playerAddress: string) {
+  try {
+    const message = {
+      timestamp: Date.now(),
+      ...action,
+    };
+
+    // Save to localStorage for real-time display
+    const key = `game_history_${playerAddress}`;
+    const existing = localStorage.getItem(key);
+    const history = existing ? JSON.parse(existing) : [];
+    history.push(message);
+    localStorage.setItem(key, JSON.stringify(history));
+
+    console.log('🎮 Action logged:', message);
+  } catch (error) {
+    console.error('Failed to log game action:', error);
+  }
 }
 
 /**
@@ -32,8 +76,6 @@ export async function postGameResult(params: {
   playerAddress: string;
 }) {
   try {
-    const client = await initializeXMTP();
-
     // Message content for the game result
     const message = {
       type: 'game_of_memes_result',
@@ -50,42 +92,33 @@ export async function postGameResult(params: {
       soulsEarned: params.playerWon ? 0 : 1,
     };
 
-    // Post to your own XMTP stream (personal game history)
-    // Later: can post to group chats, game rooms, etc.
-    const conversation = await client.conversations.newConversation(params.playerAddress);
-    await conversation.send(JSON.stringify(message, null, 2));
+    // Temporary: Save to localStorage until XMTP is working
+    const key = `game_history_${params.playerAddress}`;
+    const existing = localStorage.getItem(key);
+    const history = existing ? JSON.parse(existing) : [];
+    history.push(message);
+    localStorage.setItem(key, JSON.stringify(history));
 
-    console.log('✅ Game result posted to XMTP:', message);
+    console.log('✅ Game result saved:', message);
     return message;
   } catch (error) {
-    console.error('Failed to post game result to XMTP:', error);
-    // Don't throw - XMTP posting is optional, shouldn't break game
+    console.error('Failed to save game result:', error);
+    // Don't throw - logging is optional, shouldn't break game
   }
 }
 
 /**
- * Get game history from XMTP
+ * Get game history from XMTP (all messages - game actions, chat, results)
+ * TODO: Currently using localStorage, will use XMTP when SDK is fixed
  */
 export async function getGameHistory(playerAddress: string) {
   try {
-    const client = await initializeXMTP();
-    const conversation = await client.conversations.newConversation(playerAddress);
-    const messages = await conversation.messages();
-
-    // Filter for game result messages
-    const gameResults = messages
-      .map((msg) => {
-        try {
-          return JSON.parse(msg.content);
-        } catch {
-          return null;
-        }
-      })
-      .filter((msg) => msg?.type === 'game_of_memes_result');
-
-    return gameResults;
+    // Temporary: Use localStorage until XMTP is working
+    const stored = localStorage.getItem(`game_history_${playerAddress}`);
+    if (!stored) return [];
+    return JSON.parse(stored);
   } catch (error) {
-    console.error('Failed to get game history from XMTP:', error);
+    console.error('Failed to get game history:', error);
     return [];
   }
 }

@@ -254,6 +254,12 @@ export function MinionPortrait({
           card.rarity === "legendary" && "animate-glow-pulse",
         )}
       >
+        {/* Burning overlay when dying */}
+        {isDying && (
+          <div className="absolute inset-0 z-50 pointer-events-none animate-burn-overlay">
+            <div className="absolute inset-0 bg-gradient-radial from-transparent via-orange-600/60 to-red-900/90" />
+          </div>
+        )}
         {/* Inner frame */}
         <div className="absolute inset-0.5 rounded-lg border border-amber-500/20" />
 
