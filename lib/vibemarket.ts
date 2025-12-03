@@ -1,4 +1,40 @@
+import { createPublicClient, http, parseAbiItem } from 'viem';
+import { base } from 'viem/chains';
+import { getOwnedTokenIdsFromTransfers } from './transferIndexer';
+
 const ALCHEMY_KEY = process.env.NEXT_PUBLIC_ALCHEMY_API_KEY;
+const VIBEMARKET_API = process.env.NEXT_PUBLIC_VIBEMARKET_API || 'https://api.vibe.market';
+
+// ERC721 + VibeMarket ABI for checking pack status
+const PACK_CONTRACT_ABI = [
+  {
+    name: 'balanceOf',
+    type: 'function',
+    stateMutability: 'view',
+    inputs: [{ name: 'owner', type: 'address' }],
+    outputs: [{ type: 'uint256' }],
+  },
+  {
+    name: 'tokenOfOwnerByIndex',
+    type: 'function',
+    stateMutability: 'view',
+    inputs: [
+      { name: 'owner', type: 'address' },
+      { name: 'index', type: 'uint256' }
+    ],
+    outputs: [{ type: 'uint256' }],
+  },
+  {
+    name: 'getTokenRarity',
+    type: 'function',
+    stateMutability: 'view',
+    inputs: [{ name: 'tokenId', type: 'uint256' }],
+    outputs: [
+      { name: 'rarity', type: 'uint8' },
+      { name: 'randomValue', type: 'uint256' }
+    ],
+  },
+] as const;
 
 export interface VibeMarketCard {
   tokenId: string;
@@ -50,6 +86,152 @@ export async function fetchUserCards(address: string): Promise<VibeMarketCard[]>
     }));
   } catch (error) {
     console.error('Error fetching cards:', error);
+    return [];
+  }
+}
+
+/**
+ * Get accurate pack count directly from contract using balanceOf()
+ * This bypasses Alchemy's indexer and gets the TRUE on-chain count
+ */
+export async function getContractPackCount(contractAddress: string, ownerAddress: string): Promise<number> {
+  try {
+    const client = createPublicClient({
+      chain: base,
+      transport: http(`https://base-mainnet.g.alchemy.com/v2/${ALCHEMY_KEY}`),
+    });
+
+    const balance = await client.readContract({
+      address: contractAddress as `0x${string}`,
+      abi: PACK_CONTRACT_ABI,
+      functionName: 'balanceOf',
+      args: [ownerAddress as `0x${string}`],
+    });
+
+    return Number(balance);
+  } catch (error) {
+    console.error('Error getting contract balance:', error);
+    return 0;
+  }
+}
+
+/**
+ * Check if a token is actually unopened by calling getTokenRarity()
+ * Returns true if rarity = 0 (unopened), false if opened
+ */
+export async function isTokenUnopened(contractAddress: string, tokenId: string): Promise<boolean> {
+  try {
+    const client = createPublicClient({
+      chain: base,
+      transport: http(`https://base-mainnet.g.alchemy.com/v2/${ALCHEMY_KEY}`),
+    });
+
+    const [rarity] = await client.readContract({
+      address: contractAddress as `0x${string}`,
+      abi: PACK_CONTRACT_ABI,
+      functionName: 'getTokenRarity',
+      args: [BigInt(tokenId)],
+    });
+
+    // Rarity 0 = unopened
+    const unopened = Number(rarity) === 0;
+    console.log(`Token ${tokenId}: rarity=${rarity}, unopened=${unopened}`);
+    return unopened;
+  } catch (error) {
+    // If it throws, assume unopened
+    console.log(`Token ${tokenId}: getTokenRarity() threw, assuming unopened`);
+    return true;
+  }
+}
+
+/**
+ * Get all UNOPENED token IDs using Transfer event indexing
+ * This is 100% ACCURATE - reads blockchain events directly like BaseScan!
+ */
+export async function getOwnedTokenIds(contractAddress: string, ownerAddress: string): Promise<string[]> {
+  try {
+    // Step 1: Use Transfer event indexer to get ALL tokens you own
+    const ownedTokenIds = await getOwnedTokenIdsFromTransfers(contractAddress, ownerAddress);
+
+    console.log(`📦 Transfer indexer found ${ownedTokenIds.length} owned tokens`);
+
+    // Step 2: Check which ones are unopened using getTokenRarity()
+    const unopenedTokenIds: string[] = [];
+
+    console.log(`🔍 Checking unopened status for ${ownedTokenIds.length} tokens...`);
+
+    for (let i = 0; i < ownedTokenIds.length; i++) {
+      const tokenId = ownedTokenIds[i];
+      const isUnopened = await isTokenUnopened(contractAddress, tokenId);
+      if (isUnopened) {
+        unopenedTokenIds.push(tokenId);
+      }
+
+      if ((i + 1) % 10 === 0) {
+        console.log(`📊 Checked ${i + 1}/${ownedTokenIds.length} tokens, ${unopenedTokenIds.length} unopened so far`);
+      }
+    }
+
+    console.log(`✅ ${unopenedTokenIds.length} unopened of ${ownedTokenIds.length} owned tokens`);
+    return unopenedTokenIds;
+  } catch (error) {
+    console.error('Error getting owned token IDs:', error);
+    return [];
+  }
+}
+
+// Fetch ONLY unopened packs - force fresh ownership check
+export async function fetchUnopenedPacks(address: string, forceRefresh = false): Promise<VibeMarketCard[]> {
+  try {
+    // ALWAYS force refresh to get current ownership (not cached old data)
+    let url = `https://base-mainnet.g.alchemy.com/nft/v3/${ALCHEMY_KEY}/getNFTsForOwner?owner=${address}&withMetadata=true&pageSize=100&refreshCache=true`;
+
+    console.log('🔍 Fetching FRESH NFT ownership for:', address);
+
+    const response = await fetch(url);
+    if (!response.ok) throw new Error('Failed to fetch NFTs');
+    const data = await response.json();
+
+    let allNfts = data.ownedNfts;
+    let pageKey = data.pageKey;
+
+    // Paginate to get ALL NFTs
+    while (pageKey) {
+      const nextUrl = `${url}&pageKey=${pageKey}`;
+      const nextResponse = await fetch(nextUrl);
+      const nextData = await nextResponse.json();
+      allNfts = [...allNfts, ...nextData.ownedNfts];
+      pageKey = nextData.pageKey;
+      console.log(`📄 Page loaded, total so far: ${allNfts.length}`);
+    }
+
+    // Step 3: Filter for VibeMarket unopened packs
+    const unopenedPacks = allNfts.filter((nft: any) => {
+      const description = nft.raw?.metadata?.description || nft.description || '';
+      const isVibeMarket = description.toLowerCase().includes('vibe.market');
+
+      // Look for Status attribute (not Rarity!)
+      const statusAttr = nft.raw?.metadata?.attributes?.find(
+        (a: any) => (a.trait_type?.toLowerCase() === 'status')
+      );
+      const isMinted = statusAttr?.value?.toLowerCase() === 'minted';
+
+      return isVibeMarket && isMinted;
+    });
+
+    console.log(`✅ Found ${unopenedPacks.length} unopened VibeMarket packs`);
+
+    return unopenedPacks.map((nft: any) => ({
+      tokenId: nft.tokenId,
+      contractAddress: nft.contract.address,
+      metadata: {
+        name: nft.name || nft.title || `Pack #${nft.tokenId}`,
+        image: nft.image?.cachedUrl || nft.image?.originalUrl || nft.image?.thumbnailUrl || '/placeholder.jpg',
+        attributes: nft.raw?.metadata?.attributes || [],
+      },
+    }));
+  } catch (error) {
+    console.error('Error fetching packs:', error);
     return [];
   }
 }

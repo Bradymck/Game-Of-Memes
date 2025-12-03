@@ -50,12 +50,15 @@ export function logGameAction(action: {
       ...action,
     };
 
-    // Save to localStorage for real-time display
+    // Save to localStorage for real-time display (keep last 100 messages max)
     const key = `game_history_${playerAddress}`;
     const existing = localStorage.getItem(key);
     const history = existing ? JSON.parse(existing) : [];
     history.push(message);
-    localStorage.setItem(key, JSON.stringify(history));
+
+    // Keep only last 100 messages to prevent bloat
+    const trimmed = history.slice(-100);
+    localStorage.setItem(key, JSON.stringify(trimmed));
 
     console.log('🎮 Action logged:', message);
   } catch (error) {
@@ -92,12 +95,13 @@ export async function postGameResult(params: {
       soulsEarned: params.playerWon ? 0 : 1,
     };
 
-    // Temporary: Save to localStorage until XMTP is working
+    // Temporary: Save to localStorage until XMTP is working (keep last 100)
     const key = `game_history_${params.playerAddress}`;
     const existing = localStorage.getItem(key);
     const history = existing ? JSON.parse(existing) : [];
     history.push(message);
-    localStorage.setItem(key, JSON.stringify(history));
+    const trimmed = history.slice(-100);
+    localStorage.setItem(key, JSON.stringify(trimmed));
 
     console.log('✅ Game result saved:', message);
     return message;

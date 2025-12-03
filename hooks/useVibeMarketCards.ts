@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { usePrivy } from '@privy-io/react-auth';
-import { fetchUserCards, type VibeMarketCard } from '@/lib/vibemarket';
+import { getOpenedCards, type OpenedCard } from '@/lib/openedCards';
 import type { MemeCardData } from '@/lib/game-context';
 
 export function useVibeMarketCards() {
@@ -18,16 +18,20 @@ export function useVibeMarketCards() {
 
     setLoading(true);
     console.log('Fetching VibeMarket cards for:', user.wallet.address);
-    fetchUserCards(user.wallet.address)
-      .then((vibeCards) => {
+    getOpenedCards(user.wallet.address)
+      .then((vibeCards: OpenedCard[]) => {
         console.log('Fetched cards:', vibeCards.length);
-        // Convert VibeMarket cards to game cards
-        const gameCards: MemeCardData[] = vibeCards.map((card, index) => {
-          // Extract rarity from attributes
-          const rarityAttr = card.metadata.attributes?.find(
-            (a) => a.trait_type.toLowerCase() === 'rarity'
-          );
-          const rarity = (rarityAttr?.value?.toLowerCase() as any) || 'common';
+        // Convert opened cards to game cards
+        const gameCards: MemeCardData[] = vibeCards.map((card: OpenedCard, index: number) => {
+          // Map rarity number to rarity string
+          const rarityMap: Record<number, string> = {
+            1: 'common',
+            2: 'rare',
+            3: 'epic',
+            4: 'legendary',
+            5: 'legendary'
+          };
+          const rarity = rarityMap[card.rarity] || 'common';
 
           // Basic stats based on rarity for now
           const rarityStats = {
@@ -41,10 +45,10 @@ export function useVibeMarketCards() {
 
           return {
             id: `${card.contractAddress}-${card.tokenId}`,
-            name: card.metadata.name || `Card #${card.tokenId}`,
-            image: card.metadata.image || '/placeholder.jpg',
+            name: card.name,
+            image: card.image,
             ticker: `#${card.tokenId}`,
-            rarity,
+            rarity: rarity as 'common' | 'rare' | 'epic' | 'legendary',
             ...stats,
             canAttack: false,
           };

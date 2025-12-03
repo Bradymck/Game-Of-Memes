@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { cn } from "@/lib/utils"
 import { MessageCircle, Users, X, Send } from "lucide-react"
 import { getGameHistory } from "@/lib/xmtp"
@@ -20,6 +20,7 @@ export function ChatMenu() {
   const [loading, setLoading] = useState(false)
   const [chatInput, setChatInput] = useState("")
   const { user } = usePrivy()
+  const messagesEndRef = useRef<HTMLDivElement>(null)
 
   // Mock friends data - for future PVP
   const friends: Friend[] = []
@@ -52,6 +53,11 @@ export function ChatMenu() {
 
     return () => clearInterval(interval)
   }, [isOpen, activeTab, user?.wallet?.address])
+
+  // Auto-scroll to bottom when new messages arrive
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages])
 
   // Send chat message
   const sendMessage = async () => {
@@ -241,6 +247,7 @@ export function ChatMenu() {
 
                 return null
               })}
+              <div ref={messagesEndRef} />
             </div>
           ) : activeTab === "friends" ? (
             <div className="space-y-2">
@@ -320,6 +327,7 @@ export function ChatMenu() {
                   </div>
                 </div>
               ))}
+              <div ref={messagesEndRef} />
             </div>
           ) : null}
         </div>
