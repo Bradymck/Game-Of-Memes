@@ -19,17 +19,17 @@ export function SoulCounter() {
       {/* Ghost icon */}
       <span className="text-2xl">👻</span>
 
-      {/* Soul count */}
+      {/* Ghost Soul count */}
       <div className="flex flex-col">
         <span className="text-purple-200 font-bold text-lg leading-none">{souls}</span>
-        <span className="text-purple-400/70 text-xs leading-none">Souls</span>
+        <span className="text-purple-400/70 text-xs leading-none">Ghost Souls</span>
       </div>
 
       {/* Tooltip on hover - opens BELOW */}
       <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50">
         <div className="bg-black/95 text-purple-200 text-xs px-3 py-2 rounded-lg whitespace-nowrap border border-purple-500/30 shadow-xl">
-          <div className="font-semibold mb-1">More lives than a cat, eh?</div>
-          <div className="text-purple-300/70">Future voting power</div>
+          <div className="font-semibold mb-1">The haunting essence of burned NFTs</div>
+          <div className="text-purple-300/70">Future voting power • Nothing truly dies in Aqua Prime</div>
         </div>
         {/* Arrow pointing up */}
         <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-[-1px]">
