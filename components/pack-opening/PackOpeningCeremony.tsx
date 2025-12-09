@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
+import { useWallets } from '@privy-io/react-auth'
 import type { PackOpeningState, PackCard } from '@/lib/pack-opening-types'
 import { usePythVRF } from '@/hooks/usePythVRF'
 import { VRFWaitingState } from './VRFWaitingState'
@@ -15,11 +16,13 @@ interface PackOpeningCeremonyProps {
 
 export function PackOpeningCeremony({ packId, packName = 'Mystery Pack' }: PackOpeningCeremonyProps) {
   const router = useRouter()
+  const { wallets } = useWallets()
   const [state, setState] = useState<PackOpeningState>('LOADING')
   const [cards, setCards] = useState<PackCard[]>([])
   const [currentRevealIndex, setCurrentRevealIndex] = useState(-1)
   const [revealedCount, setRevealedCount] = useState(0)
   const [error, setError] = useState<string | null>(null)
+  const [hasStarted, setHasStarted] = useState(false)
 
   const handleVRFConfirmed = useCallback((confirmedCards: PackCard[]) => {
     setCards(confirmedCards)
@@ -38,11 +41,22 @@ export function PackOpeningCeremony({ packId, packName = 'Mystery Pack' }: PackO
     onError: handleError,
   })
 
-  // Start VRF polling on mount
+  // Demo packs don't need wallet
+  const isDemo = packId.startsWith('demo-')
+
+  // Start VRF polling when wallet is ready (or immediately for demo packs)
   useEffect(() => {
-    setState('VRF_CONFIRMING')
-    startPolling()
-  }, [startPolling])
+    // Skip if already started
+    if (hasStarted) return
+
+    // For demo packs, start immediately
+    // For real packs, wait for wallet to be available
+    if (isDemo || wallets.length > 0) {
+      setHasStarted(true)
+      setState('VRF_CONFIRMING')
+      startPolling()
+    }
+  }, [wallets.length, isDemo, hasStarted, startPolling])
 
   // Handle card flip completion
   const handleCardFlipComplete = useCallback(() => {

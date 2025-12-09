@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useCallback } from 'react'
-import { useWallets } from '@privy-io/react-auth'
+import { usePrivy, useWallets } from '@privy-io/react-auth'
 import { ethers } from 'ethers'
 import type { VRFStatus, PackCard } from '@/lib/pack-opening-types'
 
@@ -32,7 +32,11 @@ export function usePythVRF({ packId, onConfirmed, onError }: UsePythVRFOptions) 
   const [status, setStatus] = useState<VRFStatus>({ isConfirmed: false })
   const [isPolling, setIsPolling] = useState(false)
   const [cards, setCards] = useState<PackCard[]>([])
+  const { user } = usePrivy()
   const { wallets } = useWallets()
+
+  // Get the active wallet address from Privy (same source as useUnopenedPacks)
+  const activeWalletAddress = user?.wallet?.address
 
   // Parse packId into contract address and token IDs
   // Format: "0xABC...123-1,2,3,4" or "0xABC...123-1"
@@ -69,10 +73,17 @@ export function usePythVRF({ packId, onConfirmed, onError }: UsePythVRFOptions) 
 
     // Real pack opening
     try {
-      const wallet = wallets[0]
+      // Find the wallet that matches the active Privy wallet address
+      // This ensures we use the same wallet that was used to fetch the packs
+      console.log('🔍 All connected wallets:', wallets.map(w => ({ address: w.address, type: w.walletClientType })))
+      console.log('🔍 Active Privy wallet address:', activeWalletAddress)
+
+      const wallet = wallets.find(w => w.address.toLowerCase() === activeWalletAddress?.toLowerCase()) || wallets[0]
       if (!wallet) {
         throw new Error('No wallet connected')
       }
+
+      console.log('🔑 Selected wallet:', wallet.address, 'Type:', wallet.walletClientType)
 
       // Get ethers provider from wallet
       const ethereumProvider = await wallet.getEthereumProvider()
@@ -143,7 +154,16 @@ export function usePythVRF({ packId, onConfirmed, onError }: UsePythVRFOptions) 
       
       // Verify ownership of ALL tokens before opening
       const signerAddress = await signer.getAddress()
-      console.log('🔍 Verifying ownership for wallet:', signerAddress)
+      console.log('🔍 Verifying ownership for signer:', signerAddress)
+      console.log('🔍 Expected wallet (from Privy):', activeWalletAddress)
+
+      // Warn if there's a mismatch
+      if (signerAddress.toLowerCase() !== activeWalletAddress?.toLowerCase()) {
+        console.warn('⚠️ WALLET MISMATCH! Signer address does not match Privy active wallet!')
+        console.warn('   Signer:', signerAddress)
+        console.warn('   Privy:', activeWalletAddress)
+      }
+
       console.log('🔍 Checking all', parsed.tokenIds.length, 'tokens...')
       
       const ownershipChecks = await Promise.all(
@@ -282,7 +302,7 @@ export function usePythVRF({ packId, onConfirmed, onError }: UsePythVRFOptions) 
       
       onError?.(errorMessage)
     }
-  }, [packId, wallets, onConfirmed, onError])
+  }, [packId, wallets, activeWalletAddress, onConfirmed, onError])
 
   return {
     status,

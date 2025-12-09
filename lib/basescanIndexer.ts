@@ -1,14 +1,20 @@
 import { fetchUnopenedPacksFromVibeMarket } from './vibemarket';
+import { ethers } from 'ethers';
 
 const ALCHEMY_KEY = process.env.NEXT_PUBLIC_ALCHEMY_API_KEY;
+const BASE_RPC = 'https://mainnet.base.org';
+
+// Minimal ABI for checking pack status
+const BOOSTER_DROP_ABI = [
+  'function getTokenRarity(uint256 tokenId) view returns (uint8 rarity, uint256 randomValue, uint256 tokenSpecificRandomness)',
+];
 
 /**
- * Fetch unopened packs using Alchemy API
- * Note: Vibe Market API is rate-limited, so we're using Alchemy directly for now
+ * Fetch unopened packs using Alchemy API + on-chain verification
+ * Checks getTokenRarity() on-chain - if it throws, pack is unopened
  */
 export async function getUnopenedPacksFromBaseScan(ownerAddress: string) {
-  // Use Alchemy directly due to Vibe Market rate limiting
-  console.log('📦 Fetching packs using Alchemy (Vibe Market API is rate-limited)');
+  console.log('📦 Fetching packs using Alchemy + on-chain verification');
   return getUnopenedPacksFromAlchemy(ownerAddress);
 }
 
@@ -79,26 +85,56 @@ async function getUnopenedPacksFromAlchemy(ownerAddress: string) {
       return [];
     }
 
-    // Filter for unopened packs (rarity attribute === 'unopened')
-    const unopenedPacks = allNfts
-      .filter((nft: any) => {
-        // Safety checks for nested properties
-        if (!nft?.raw?.metadata?.attributes) return false;
+    // Group NFTs by contract address for batch on-chain checking
+    const nftsByContract = new Map<string, any[]>();
+    allNfts.forEach((nft: any) => {
+      const contract = nft.contract?.address;
+      if (contract) {
+        if (!nftsByContract.has(contract)) {
+          nftsByContract.set(contract, []);
+        }
+        nftsByContract.get(contract)!.push(nft);
+      }
+    });
 
-        const rarityAttr = nft.raw.metadata.attributes.find(
-          (attr: any) => attr?.trait_type?.toLowerCase() === 'rarity'
-        );
-        const isUnopened = rarityAttr?.value?.toLowerCase() === 'unopened';
+    console.log(`📊 Found NFTs from ${nftsByContract.size} contracts`);
 
-        return isUnopened;
-      })
-      .map((nft: any) => ({
-        id: `${nft.contract?.address || 'unknown'}-${nft.tokenId || 'unknown'}`,
-        tokenId: nft.tokenId || '0',
-        contractAddress: nft.contract?.address || '',
-        name: nft.raw?.metadata?.name || `Pack #${nft.tokenId || 'Unknown'}`,
-        image: nft.image?.cachedUrl || nft.image?.thumbnailUrl || '/vibe.png',
-      }));
+    // Check on-chain status for each contract's tokens
+    const provider = new ethers.JsonRpcProvider(BASE_RPC);
+    const unopenedPacks: any[] = [];
+
+    for (const [contractAddress, nfts] of nftsByContract) {
+      console.log(`🔍 Checking ${nfts.length} tokens on contract ${contractAddress.slice(0, 10)}...`);
+
+      const contract = new ethers.Contract(contractAddress, BOOSTER_DROP_ABI, provider);
+
+      // Check each token - if getTokenRarity() throws, it's unopened
+      const checks = await Promise.all(
+        nfts.map(async (nft: any) => {
+          try {
+            // If this succeeds, pack is OPENED (has rarity assigned)
+            await contract.getTokenRarity(nft.tokenId);
+            return { nft, isUnopened: false };
+          } catch {
+            // If it throws, pack is UNOPENED
+            return { nft, isUnopened: true };
+          }
+        })
+      );
+
+      const unopened = checks.filter(c => c.isUnopened);
+      console.log(`  ✅ ${unopened.length}/${nfts.length} are unopened`);
+
+      unopened.forEach(({ nft }) => {
+        unopenedPacks.push({
+          id: `${nft.contract?.address || 'unknown'}-${nft.tokenId || 'unknown'}`,
+          tokenId: nft.tokenId || '0',
+          contractAddress: nft.contract?.address || '',
+          name: nft.raw?.metadata?.name || `Pack #${nft.tokenId || 'Unknown'}`,
+          image: nft.image?.cachedUrl || nft.image?.thumbnailUrl || '/vibe.png',
+        });
+      });
+    }
 
     console.log(`✅ Found ${unopenedPacks.length} unopened packs out of ${allNfts.length} total NFTs`);
     return unopenedPacks;

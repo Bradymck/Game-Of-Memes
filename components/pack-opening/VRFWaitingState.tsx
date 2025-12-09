@@ -32,17 +32,17 @@ export function VRFWaitingState({ packName, onComplete }: VRFWaitingStateProps) 
 
   return (
     <div className="fixed inset-0 bg-black flex flex-col items-center justify-center overflow-hidden">
-      {/* Background particles */}
+      {/* Background particles - use deterministic positions based on index to avoid hydration mismatch */}
       <div className="absolute inset-0 overflow-hidden">
         {Array.from({ length: 20 }).map((_, i) => (
           <div
             key={i}
             className="absolute w-1 h-1 bg-amber-400/30 rounded-full animate-float"
             style={{
-              left: `${Math.random() * 100}%`,
-              top: `${Math.random() * 100}%`,
-              animationDelay: `${Math.random() * 3}s`,
-              animationDuration: `${3 + Math.random() * 2}s`,
+              left: `${(i * 17 + 5) % 100}%`,
+              top: `${(i * 23 + 10) % 100}%`,
+              animationDelay: `${(i * 0.15) % 3}s`,
+              animationDuration: `${3 + (i % 5) * 0.4}s`,
             }}
           />
         ))}

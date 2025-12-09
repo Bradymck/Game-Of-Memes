@@ -230,7 +230,7 @@ export default function DraftIndexPage() {
                 value={slot.collection?.contractAddress || ''}
                 onChange={(e) => {
                   const selected = collections.find(c => c.contractAddress === e.target.value)
-                  updateSlot(index, { 
+                  updateSlot(index, {
                     collection: selected || null,
                     count: selected ? Math.min(selected.count, MIN_PACKS) : 0
                   })
@@ -238,11 +238,19 @@ export default function DraftIndexPage() {
                 className="w-full bg-slate-800 text-white rounded-lg px-3 py-2 mb-4 border border-slate-600 focus:border-amber-500 focus:outline-none"
               >
                 <option value="">-- Select Pack --</option>
-                {collections.map(c => (
-                  <option key={c.contractAddress} value={c.contractAddress}>
-                    {c.name} ({c.count} available)
-                  </option>
-                ))}
+                {collections
+                  .filter(c => {
+                    // Allow current slot's selection, exclude collections used in other slots
+                    const usedInOtherSlots = slots.some(
+                      (s, i) => i !== index && s.collection?.contractAddress === c.contractAddress
+                    )
+                    return !usedInOtherSlots
+                  })
+                  .map(c => (
+                    <option key={c.contractAddress} value={c.contractAddress}>
+                      {c.name} ({c.count} available)
+                    </option>
+                  ))}
               </select>
 
               {/* Pack Preview */}

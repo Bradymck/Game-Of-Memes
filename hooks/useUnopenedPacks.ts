@@ -71,6 +71,7 @@ export function useUnopenedPacks() {
     }
 
     console.log('🔍 useUnopenedPacks fetching for wallet:', walletAddress)
+    console.log('📍 Full user object wallet:', user?.wallet)
     setLoading(true)
     setError(null)
 
