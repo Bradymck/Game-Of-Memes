@@ -1,9 +1,10 @@
-import { createPublicClient, http, parseAbiItem } from 'viem';
+import { createPublicClient, http, parseAbiItem, getAddress } from 'viem';
 import { base } from 'viem/chains';
 import { getOwnedTokenIdsFromTransfers } from './transferIndexer';
 
 const ALCHEMY_KEY = process.env.NEXT_PUBLIC_ALCHEMY_API_KEY;
-const VIBEMARKET_API = process.env.NEXT_PUBLIC_VIBEMARKET_API || 'https://api.vibe.market';
+const VIBEMARKET_API_BASE = 'https://build.wield.xyz/vibe/boosterbox';
+const WIELD_API_KEY = process.env.WIELD_API_KEY;
 
 // ERC721 + VibeMarket ABI for checking pack status
 const PACK_CONTRACT_ABI = [
@@ -239,11 +240,86 @@ export async function fetchUnopenedPacks(address: string, forceRefresh = false):
 // Get pack contract info (includes ERC20 token address)
 export async function getPackInfo(contractAddress: string) {
   try {
-    const response = await fetch(`${VIBEMARKET_API}/contractAddress/${contractAddress}`);
+    const headers: Record<string, string> = {
+      'Accept': 'application/json',
+    };
+
+    if (WIELD_API_KEY) {
+      headers['API-KEY'] = WIELD_API_KEY;
+    }
+
+    const response = await fetch(`${VIBEMARKET_API_BASE}/contractAddress/${contractAddress}`, { headers });
     if (!response.ok) throw new Error('Failed to fetch pack info');
     return await response.json();
   } catch (error) {
     console.error('Error fetching pack info:', error);
     return null;
+  }
+}
+
+/**
+ * Fetch unopened packs from Vibe Market API
+ * Uses the correct endpoint: /owner/{address}
+ * This provides real-time data without waiting for Alchemy indexing
+ */
+export async function fetchUnopenedPacksFromVibeMarket(address: string): Promise<VibeMarketCard[]> {
+  try {
+    // Convert address to checksum format (required by Vibe Market API)
+    const checksumAddress = getAddress(address);
+    console.log('🔍 Fetching packs from Vibe Market API for:', checksumAddress);
+    const url = `${VIBEMARKET_API_BASE}/owner/${checksumAddress}`;
+    console.log('API URL:', url);
+
+    const headers: Record<string, string> = {
+      'Accept': 'application/json',
+    };
+
+    // Add API key if available
+    if (WIELD_API_KEY) {
+      headers['API-KEY'] = WIELD_API_KEY;
+      console.log('Using Wield API key for authentication');
+    }
+
+    const response = await fetch(url, { headers });
+    if (!response.ok) {
+      console.error('Vibe Market API response not OK:', response.status, response.statusText);
+      throw new Error(`Vibe Market API error: ${response.status}`);
+    }
+
+    const result = await response.json();
+    console.log('Vibe Market API raw response:', JSON.stringify(result, null, 2));
+
+    // API returns { success: true, data: [...] }
+    if (!result.success || !result.data) {
+      console.warn('Unexpected API response structure:', result);
+      throw new Error('Unexpected API response structure');
+    }
+
+    const boosterBoxes = Array.isArray(result.data) ? result.data : [];
+    console.log(`Found ${boosterBoxes.length} total BoosterBoxes from Vibe Market`);
+
+    // Filter for unopened packs (rarity = 0)
+    const unopenedPacks = boosterBoxes.filter((box: any) => {
+      const isUnopened = box.rarity === 0;
+      if (isUnopened) {
+        console.log('Found unopened pack:', box.tokenId, box.contractAddress);
+      }
+      return isUnopened;
+    });
+
+    console.log(`✅ Vibe Market API found ${unopenedPacks.length} unopened packs`);
+
+    return unopenedPacks.map((box: any) => ({
+      tokenId: box.tokenId.toString(),
+      contractAddress: box.contractAddress,
+      metadata: {
+        name: box.name || `Pack #${box.tokenId}`,
+        image: box.image || '/vibe.png',
+        attributes: box.attributes || [],
+      },
+    }));
+  } catch (error) {
+    console.error('Error fetching from Vibe Market API:', error);
+    throw error;
   }
 }

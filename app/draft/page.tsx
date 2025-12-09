@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { usePrivy } from '@privy-io/react-auth'
 import { useUnopenedPacks, type PackCollection } from '@/hooks/useUnopenedPacks'
 import { Button } from '@/components/ui/button'
+import { WalletButton } from '@/components/wallet-button'
 
 interface DeckSlot {
   collection: PackCollection | null
@@ -195,14 +196,19 @@ export default function DraftIndexPage() {
   return (
     <main className="min-h-screen bg-black p-4 md:p-8">
       <div className="max-w-5xl mx-auto">
-        {/* Header */}
-        <div className="text-center mb-8">
-          <h1 className="text-3xl md:text-4xl font-bold text-white mb-2">
-            Build Your Draft Deck
-          </h1>
-          <p className="text-gray-400">
-            Select up to 3 pack collections to mix ({MIN_PACKS}-{MAX_PACKS} packs per slot)
-          </p>
+        {/* Header with Wallet Button */}
+        <div className="flex justify-between items-center mb-8">
+          <div className="flex-1">
+            <h1 className="text-3xl md:text-4xl font-bold text-white mb-2">
+              Build Your Draft Deck
+            </h1>
+            <p className="text-gray-400">
+              Select up to 3 pack collections to mix ({MIN_PACKS}-{MAX_PACKS} packs per slot)
+            </p>
+          </div>
+          <div className="flex-shrink-0 ml-4">
+            <WalletButton />
+          </div>
         </div>
 
         {/* 3 Deck Slots */}

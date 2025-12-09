@@ -1,140 +1,109 @@
-import { createPublicClient, http } from 'viem';
-import { base } from 'viem/chains';
+import { fetchUnopenedPacksFromVibeMarket } from './vibemarket';
 
 const ALCHEMY_KEY = process.env.NEXT_PUBLIC_ALCHEMY_API_KEY;
-const BASESCAN_API_KEY = process.env.NEXT_PUBLIC_BASESCAN_API_KEY || 'demo'; // Using demo key for now
 
-// Known VibeMarket contracts
-const VIBEMARKET_CONTRACTS = [
-  '0x20306f3C373A445A0C607Bb0eB5Df15d29952FA4',
-  '0x3eA4861190176BcB192764B1496EbEB7e38bC366',
-  '0xEa6045410D3024b5Fb22AA531c13A31Dae0a56Ea',
-  '0xF14C1dC8Ce5fE65413379F76c43fA1460C31E728',
-  '0xc0B02E8e9f56A449CcCDc83AE053B887f2E6eBDd',
-  '0xfF18ff973337BCc07d4B5a8Fa741b904014a1172',
-];
-
-const PACK_ABI = [
-  {
-    name: 'getTokenRarity',
-    type: 'function',
-    stateMutability: 'view',
-    inputs: [{ name: 'tokenId', type: 'uint256' }],
-    outputs: [{ name: 'rarity', type: 'uint8' }, { name: 'randomValue', type: 'uint256' }],
-  },
-] as const;
-
+/**
+ * Fetch unopened packs using Alchemy API
+ * Note: Vibe Market API is rate-limited, so we're using Alchemy directly for now
+ */
 export async function getUnopenedPacksFromBaseScan(ownerAddress: string) {
-  console.log('🔍 Indexing Transfer events from blockchain (viem)...');
+  // Use Alchemy directly due to Vibe Market rate limiting
+  console.log('📦 Fetching packs using Alchemy (Vibe Market API is rate-limited)');
+  return getUnopenedPacksFromAlchemy(ownerAddress);
+}
 
-  const allPacks: Array<{ contractAddress: string; tokenId: string }> = [];
+/**
+ * Fetch unopened packs using Alchemy NFT API
+ * Simple, fast, uses their indexing
+ */
+async function getUnopenedPacksFromAlchemy(ownerAddress: string) {
+  console.log('🔍 Fetching unopened packs from Alchemy NFT API for:', ownerAddress);
 
-  const client = createPublicClient({
-    chain: base,
-    transport: http(`https://base-mainnet.g.alchemy.com/v2/${ALCHEMY_KEY}`),
-  });
+  if (!ALCHEMY_KEY) {
+    console.error('❌ ALCHEMY_KEY is not set');
+    return [];
+  }
 
-  for (const contract of VIBEMARKET_CONTRACTS) {
-    try {
-      console.log(`📦 Scanning ${contract}...`);
+  try {
+    let allNfts: any[] = [];
+    let pageKey: string | undefined = undefined;
+    let pageCount = 0;
+    const MAX_PAGES = 50; // Safety limit to prevent infinite loops
 
-      // Query Transfer events using viem (no API needed!)
-      const transfersTo = await client.getLogs({
-        address: contract as `0x${string}`,
-        event: { type: 'event', name: 'Transfer', inputs: [
-          { indexed: true, name: 'from', type: 'address' },
-          { indexed: true, name: 'to', type: 'address' },
-          { indexed: true, name: 'tokenId', type: 'uint256' }
-        ]},
-        args: { to: ownerAddress as `0x${string}` },
-        fromBlock: 'earliest',
-        toBlock: 'latest',
-      });
-
-      const transfersFrom = await client.getLogs({
-        address: contract as `0x${string}`,
-        event: { type: 'event', name: 'Transfer', inputs: [
-          { indexed: true, name: 'from', type: 'address' },
-          { indexed: true, name: 'to', type: 'address' },
-          { indexed: true, name: 'tokenId', type: 'uint256' }
-        ]},
-        args: { from: ownerAddress as `0x${string}` },
-        fromBlock: 'earliest',
-        toBlock: 'latest',
-      });
-
-      // Calculate owned tokens
-      const received = new Set(transfersTo.map(log => log.args.tokenId!.toString()));
-      const sent = new Set(transfersFrom.map(log => log.args.tokenId!.toString()));
-      const owned: string[] = [];
-      received.forEach(tokenId => {
-        if (!sent.has(tokenId)) {
-          owned.push(tokenId);
-        }
-      });
-
-      console.log(`  Received: ${received.size}, Sent: ${sent.size}, Owned: ${owned.length}`);
-
-      // Check which are unopened
-      // Logic: rarity 0 = unopened/minted, rarity 1-5 = opened with assigned rarity
-      let unopenedCount = 0;
-      for (const tokenId of owned) {
-        try {
-          const [rarity] = await client.readContract({
-            address: contract as `0x${string}`,
-            abi: PACK_ABI,
-            functionName: 'getTokenRarity',
-            args: [BigInt(tokenId)],
-          });
-
-          if (Number(rarity) === 0) {
-            // Rarity 0 = unopened/minted
-            console.log(`  Token ${tokenId}: UNOPENED (rarity=0)`);
-            allPacks.push({ contractAddress: contract, tokenId });
-            unopenedCount++;
-          } else {
-            // Rarity 1-5 = opened
-            console.log(`  Token ${tokenId}: opened (rarity=${rarity})`);
-          }
-        } catch {
-          // Error = invalid/burned token
-          console.log(`  Token ${tokenId}: error (burned or invalid)`);
-        }
+    // Paginate through ALL NFTs
+    do {
+      // Safety check to prevent infinite loops
+      if (pageCount >= MAX_PAGES) {
+        console.warn(`⚠️ Reached max page limit (${MAX_PAGES}), stopping pagination`);
+        break;
       }
 
-      console.log(`  ✅ ${unopenedCount} unopened from this contract`);
-    } catch (error) {
-      console.error(`Error for contract ${contract}:`, error);
-    }
-  }
+      const url: string = `https://base-mainnet.g.alchemy.com/nft/v3/${ALCHEMY_KEY}/getNFTsForOwner?owner=${ownerAddress}&withMetadata=true&refreshCache=true${pageKey ? `&pageKey=${pageKey}` : ''}`;
+      console.log(`Alchemy API URL (page ${pageCount + 1}):`, url);
 
-  console.log(`✅ Total unopened: ${allPacks.length}`);
-
-  // Fetch metadata
-  const packsWithMetadata = [];
-  for (const pack of allPacks) {
-    try {
-      const metaUrl = `https://base-mainnet.g.alchemy.com/nft/v3/${ALCHEMY_KEY}/getNFTMetadata?contractAddress=${pack.contractAddress}&tokenId=${pack.tokenId}`;
-      const response = await fetch(metaUrl);
-      const data = await response.json();
-
-      packsWithMetadata.push({
-        id: `${pack.contractAddress}-${pack.tokenId}`,
-        tokenId: pack.tokenId,
-        contractAddress: pack.contractAddress,
-        name: data.name || `Pack #${pack.tokenId}`,
-        image: data.image?.cachedUrl || data.image?.originalUrl || '/placeholder.jpg',
+      const response: Response = await fetch(url, {
+        method: 'GET',
+        headers: { 'Accept': 'application/json' },
+        cache: 'no-store'
       });
-    } catch {
-      packsWithMetadata.push({
-        id: `${pack.contractAddress}-${pack.tokenId}`,
-        tokenId: pack.tokenId,
-        contractAddress: pack.contractAddress,
-        name: `Pack #${pack.tokenId}`,
-        image: '/placeholder.jpg',
-      });
-    }
-  }
 
-  return packsWithMetadata;
+      // Check for HTTP errors
+      if (!response.ok) {
+        console.error(`❌ Alchemy API returned ${response.status}: ${response.statusText}`);
+        break;
+      }
+
+      const data: any = await response.json();
+
+      // Validate response structure
+      if (!data || typeof data !== 'object') {
+        console.error('❌ Invalid response from Alchemy API');
+        break;
+      }
+
+      if (Array.isArray(data.ownedNfts)) {
+        allNfts = [...allNfts, ...data.ownedNfts];
+        pageKey = data.pageKey; // Will be undefined when no more pages
+        pageCount++;
+        console.log(`📄 Page ${pageCount}: Got ${data.ownedNfts.length} NFTs, total so far: ${allNfts.length}`);
+      } else {
+        console.log('📄 No more NFTs to fetch');
+        break;
+      }
+    } while (pageKey);
+
+    console.log(`📊 Alchemy returned ${allNfts.length} total NFTs across ${pageCount} pages`);
+
+    if (allNfts.length === 0) {
+      console.warn('No NFTs found');
+      return [];
+    }
+
+    // Filter for unopened packs (rarity attribute === 'unopened')
+    const unopenedPacks = allNfts
+      .filter((nft: any) => {
+        // Safety checks for nested properties
+        if (!nft?.raw?.metadata?.attributes) return false;
+
+        const rarityAttr = nft.raw.metadata.attributes.find(
+          (attr: any) => attr?.trait_type?.toLowerCase() === 'rarity'
+        );
+        const isUnopened = rarityAttr?.value?.toLowerCase() === 'unopened';
+
+        return isUnopened;
+      })
+      .map((nft: any) => ({
+        id: `${nft.contract?.address || 'unknown'}-${nft.tokenId || 'unknown'}`,
+        tokenId: nft.tokenId || '0',
+        contractAddress: nft.contract?.address || '',
+        name: nft.raw?.metadata?.name || `Pack #${nft.tokenId || 'Unknown'}`,
+        image: nft.image?.cachedUrl || nft.image?.thumbnailUrl || '/vibe.png',
+      }));
+
+    console.log(`✅ Found ${unopenedPacks.length} unopened packs out of ${allNfts.length} total NFTs`);
+    return unopenedPacks;
+  } catch (error) {
+    console.error('Failed to fetch unopened packs:', error);
+    return [];
+  }
 }
