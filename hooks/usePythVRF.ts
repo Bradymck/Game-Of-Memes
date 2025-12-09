@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import { usePrivy, useWallets } from '@privy-io/react-auth'
 import { ethers } from 'ethers'
 import type { VRFStatus, PackCard } from '@/lib/pack-opening-types'
@@ -35,6 +35,9 @@ export function usePythVRF({ packId, onConfirmed, onError }: UsePythVRFOptions) 
   const { user } = usePrivy()
   const { wallets } = useWallets()
 
+  // Use ref to prevent double calls (React Strict Mode)
+  const isPollingRef = useRef(false)
+
   // Get the active wallet address from Privy (same source as useUnopenedPacks)
   const activeWalletAddress = user?.wallet?.address
 
@@ -53,6 +56,13 @@ export function usePythVRF({ packId, onConfirmed, onError }: UsePythVRFOptions) 
 
   // Start the actual pack opening flow
   const startPolling = useCallback(async () => {
+    // Prevent double calls (React Strict Mode or accidental double-click)
+    if (isPollingRef.current) {
+      console.log('⚠️ Already polling, skipping duplicate call')
+      return
+    }
+    isPollingRef.current = true
+
     setIsPolling(true)
     setStatus({ isConfirmed: false })
 
@@ -187,16 +197,19 @@ export function usePythVRF({ packId, onConfirmed, onError }: UsePythVRFOptions) 
       
       console.log('✅ All', parsed.tokenIds.length, 'tokens verified')
       
-      // Get entropy fee
+      // Get entropy fee (per pack)
       console.log('💰 Getting entropy fee...')
-      const entropyFee = await contract.getEntropyFee()
-      console.log('✅ Entropy fee:', ethers.formatEther(entropyFee), 'ETH')
-      
+      const entropyFeePerPack = await contract.getEntropyFee()
+      // Total fee = fee per pack * number of packs
+      const totalEntropyFee = entropyFeePerPack * BigInt(parsed.tokenIds.length)
+      console.log('✅ Entropy fee per pack:', ethers.formatEther(entropyFeePerPack), 'ETH')
+      console.log('✅ Total entropy fee for', parsed.tokenIds.length, 'packs:', ethers.formatEther(totalEntropyFee), 'ETH')
+
       // Call open function with all token IDs
       console.log('🎲 Calling open() with', parsed.tokenIds.length, 'packs...')
-      console.log('💵 Sending entropy fee:', ethers.formatEther(entropyFee), 'ETH')
-      
-      const tx = await contract.open(parsed.tokenIds, { value: entropyFee })
+      console.log('💵 Sending total entropy fee:', ethers.formatEther(totalEntropyFee), 'ETH')
+
+      const tx = await contract.open(parsed.tokenIds, { value: totalEntropyFee })
       console.log('✅ Open tx submitted:', tx.hash)
       
       // Wait for transaction
@@ -205,62 +218,89 @@ export function usePythVRF({ packId, onConfirmed, onError }: UsePythVRFOptions) 
       
       // Poll for VRF fulfillment for ALL tokens
       let attempts = 0
-      const maxAttempts = 60 // 30 seconds max
-      
+      const maxAttempts = 120 // 60 seconds max (VRF can take a while)
+
       const revealedCards: PackCard[] = []
+      const revealedTokenIds = new Set<string>()
       const rarityMap: Record<number, 'common' | 'rare' | 'epic' | 'legendary' | 'mythic'> = {
         1: 'common',
-        2: 'rare', 
+        2: 'rare',
         3: 'epic',
         4: 'legendary',
         5: 'mythic',
       }
-      
+
+      console.log('⏳ Waiting for VRF fulfillment for', parsed.tokenIds.length, 'tokens...')
+
       while (attempts < maxAttempts && revealedCards.length < parsed.tokenIds.length) {
         await new Promise(resolve => setTimeout(resolve, 500))
-        
-        // Check each token
-        for (const tokenId of parsed.tokenIds) {
-          // Skip if already revealed
-          if (revealedCards.some(c => c.id.endsWith(`-${tokenId}`))) continue
-          
-          try {
-            const rarityInfo = await contract.getTokenRarity(tokenId)
-            
-            // VRF fulfilled for this token! Fetch metadata
-            const tokenUri = await contract.tokenURI(tokenId)
-            const httpUri = ipfsToHttp(tokenUri)
-            const metaResponse = await fetch(httpUri)
-            const metadata = await metaResponse.json()
-            
-            const revealedCard: PackCard = {
-              id: `${parsed.contractAddress}-${tokenId}`,
-              name: metadata.name || `Card #${tokenId}`,
-              image: ipfsToHttp(metadata.image || '/placeholder.jpg'),
-              ticker: metadata.attributes?.find((a: any) => a.trait_type === 'Ticker')?.value || '',
-              rarity: rarityMap[Number(rarityInfo.rarity)] || 'common',
-              attack: 3,
-              health: 3,
-              mana: 2,
-              isRevealed: false,
+
+        // Check all unrevealed tokens in parallel
+        const unrevealedTokenIds = parsed.tokenIds.filter(id => !revealedTokenIds.has(id))
+
+        const results = await Promise.allSettled(
+          unrevealedTokenIds.map(async (tokenId) => {
+            try {
+              const rarityInfo = await contract.getTokenRarity(tokenId)
+              const rarity = Number(rarityInfo.rarity)
+
+              // Rarity 0 means not yet revealed
+              if (rarity === 0) {
+                return null
+              }
+
+              // VRF fulfilled! Fetch metadata
+              const tokenUri = await contract.tokenURI(tokenId)
+              const httpUri = ipfsToHttp(tokenUri)
+              const metaResponse = await fetch(httpUri)
+              const metadata = await metaResponse.json()
+
+              return {
+                tokenId,
+                card: {
+                  id: `${parsed.contractAddress}-${tokenId}`,
+                  name: metadata.name || `Card #${tokenId}`,
+                  image: ipfsToHttp(metadata.image || '/placeholder.jpg'),
+                  ticker: metadata.attributes?.find((a: any) => a.trait_type === 'Ticker')?.value || '',
+                  rarity: rarityMap[rarity] || 'common',
+                  attack: 3,
+                  health: 3,
+                  mana: 2,
+                  isRevealed: false,
+                } as PackCard
+              }
+            } catch (e) {
+              // VRF not fulfilled yet or error
+              return null
             }
-            
-            revealedCards.push(revealedCard)
-            console.log(`Card ${tokenId} revealed:`, revealedCard.rarity)
-            
-          } catch (e) {
-            // VRF not fulfilled yet for this token
+          })
+        )
+
+        // Process successful results
+        for (const result of results) {
+          if (result.status === 'fulfilled' && result.value) {
+            const { tokenId, card } = result.value
+            if (!revealedTokenIds.has(tokenId)) {
+              revealedTokenIds.add(tokenId)
+              revealedCards.push(card)
+              console.log(`Card ${tokenId} revealed:`, card.rarity, `(${revealedCards.length}/${parsed.tokenIds.length})`)
+            }
           }
         }
-        
+
         attempts++
+
+        // Log progress every 10 attempts
+        if (attempts % 10 === 0) {
+          console.log(`⏳ Still waiting... ${revealedCards.length}/${parsed.tokenIds.length} revealed (attempt ${attempts}/${maxAttempts})`)
+        }
       }
-      
+
       if (revealedCards.length === 0) {
-        throw new Error('VRF timeout - no cards revealed')
+        throw new Error('VRF timeout - no cards revealed after 60 seconds. The VRF oracle may be slow.')
       }
-      
-      console.log(`Revealed ${revealedCards.length}/${parsed.tokenIds.length} cards`)
+
+      console.log(`✅ Revealed ${revealedCards.length}/${parsed.tokenIds.length} cards`)
       
       setCards(revealedCards)
       setStatus({

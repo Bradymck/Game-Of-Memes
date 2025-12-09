@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useMemo } from 'react'
 import { usePrivy } from '@privy-io/react-auth'
-import { getUnopenedPacksFromBaseScan } from '@/lib/basescanIndexer'
 
 export interface UnopenedPack {
   id: string
@@ -76,7 +75,15 @@ export function useUnopenedPacks() {
     setError(null)
 
     try {
-      const result = await getUnopenedPacksFromBaseScan(walletAddress)
+      // Use server-side API route that calls Vibe Market API with status=minted filter
+      const response = await fetch(`/api/packs?owner=${walletAddress}`)
+      const data = await response.json()
+
+      if (data.error) {
+        throw new Error(data.error)
+      }
+
+      const result = data.packs || []
       console.log('📦 useUnopenedPacks received packs:', result.length, result)
       setPacks(result)
     } catch (err: any) {

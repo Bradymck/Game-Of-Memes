@@ -1,20 +1,19 @@
-import { fetchUnopenedPacksFromVibeMarket } from './vibemarket';
 import { ethers } from 'ethers';
 
 const ALCHEMY_KEY = process.env.NEXT_PUBLIC_ALCHEMY_API_KEY;
 const BASE_RPC = 'https://mainnet.base.org';
 
-// Minimal ABI for checking pack status
+// ABI for checking pack status on-chain
 const BOOSTER_DROP_ABI = [
   'function getTokenRarity(uint256 tokenId) view returns (uint8 rarity, uint256 randomValue, uint256 tokenSpecificRandomness)',
 ];
 
 /**
  * Fetch unopened packs using Alchemy API + on-chain verification
- * Checks getTokenRarity() on-chain - if it throws, pack is unopened
+ * Alchemy metadata can be stale, so we verify on-chain with getTokenRarity()
  */
 export async function getUnopenedPacksFromBaseScan(ownerAddress: string) {
-  console.log('📦 Fetching packs using Alchemy + on-chain verification');
+  console.log('📦 Fetching unopened packs using Alchemy + on-chain verification');
   return getUnopenedPacksFromAlchemy(ownerAddress);
 }
 
@@ -85,45 +84,59 @@ async function getUnopenedPacksFromAlchemy(ownerAddress: string) {
       return [];
     }
 
-    // Group NFTs by contract address for batch on-chain checking
-    const nftsByContract = new Map<string, any[]>();
-    allNfts.forEach((nft: any) => {
-      const contract = nft.contract?.address;
-      if (contract) {
-        if (!nftsByContract.has(contract)) {
-          nftsByContract.set(contract, []);
-        }
-        nftsByContract.get(contract)!.push(nft);
+    // Filter to only Vibe Market packs (by description)
+    const vibePacks = allNfts.filter((nft: any) => {
+      const description = nft.raw?.metadata?.description?.toLowerCase() || '';
+      return description.includes('vibe.market');
+    });
+
+    console.log(`📊 Found ${vibePacks.length} Vibe Market packs`);
+
+    if (vibePacks.length === 0) {
+      return [];
+    }
+
+    // Group by contract for batch on-chain verification
+    const byContract = new Map<string, any[]>();
+    vibePacks.forEach((nft: any) => {
+      const addr = nft.contract?.address;
+      if (addr) {
+        if (!byContract.has(addr)) byContract.set(addr, []);
+        byContract.get(addr)!.push(nft);
       }
     });
 
-    console.log(`📊 Found NFTs from ${nftsByContract.size} contracts`);
-
-    // Check on-chain status for each contract's tokens
+    // Verify on-chain: getTokenRarity() throws = unopened, returns = opened
     const provider = new ethers.JsonRpcProvider(BASE_RPC);
     const unopenedPacks: any[] = [];
 
-    for (const [contractAddress, nfts] of nftsByContract) {
-      console.log(`🔍 Checking ${nfts.length} tokens on contract ${contractAddress.slice(0, 10)}...`);
+    for (const [contractAddr, nfts] of byContract) {
+      console.log(`🔍 Verifying ${nfts.length} packs on ${contractAddr.slice(0, 10)}...`);
+      const contract = new ethers.Contract(contractAddr, BOOSTER_DROP_ABI, provider);
 
-      const contract = new ethers.Contract(contractAddress, BOOSTER_DROP_ABI, provider);
-
-      // Check each token - if getTokenRarity() throws, it's unopened
-      const checks = await Promise.all(
+      const results = await Promise.all(
         nfts.map(async (nft: any) => {
           try {
-            // If this succeeds, pack is OPENED (has rarity assigned)
-            await contract.getTokenRarity(nft.tokenId);
-            return { nft, isUnopened: false };
-          } catch {
-            // If it throws, pack is UNOPENED
-            return { nft, isUnopened: true };
+            // If getTokenRarity succeeds with rarity > 0, pack is OPENED
+            const result = await contract.getTokenRarity(nft.tokenId);
+            const rarity = Number(result[0]);
+            // Rarity 0 means unopened, rarity 1-5 means opened
+            const isOpened = rarity > 0;
+            console.log(`    Token ${nft.tokenId}: rarity=${rarity} -> ${isOpened ? 'OPENED' : 'UNOPENED'}`);
+            return { nft, unopened: !isOpened };
+          } catch (err: any) {
+            // Revert means pack is UNOPENED (no rarity assigned yet)
+            // But also check if it's a real revert vs network error
+            const errMsg = err?.message || '';
+            const isRevert = errMsg.includes('revert') || errMsg.includes('CALL_EXCEPTION') || err?.code === 'CALL_EXCEPTION';
+            console.log(`    Token ${nft.tokenId}: ${isRevert ? 'REVERTED (unopened)' : 'ERROR: ' + errMsg.slice(0, 50)}`);
+            return { nft, unopened: isRevert };
           }
         })
       );
 
-      const unopened = checks.filter(c => c.isUnopened);
-      console.log(`  ✅ ${unopened.length}/${nfts.length} are unopened`);
+      const unopened = results.filter(r => r.unopened);
+      console.log(`  ✅ ${unopened.length}/${nfts.length} are truly unopened`);
 
       unopened.forEach(({ nft }) => {
         unopenedPacks.push({
@@ -136,7 +149,7 @@ async function getUnopenedPacksFromAlchemy(ownerAddress: string) {
       });
     }
 
-    console.log(`✅ Found ${unopenedPacks.length} unopened packs out of ${allNfts.length} total NFTs`);
+    console.log(`✅ Found ${unopenedPacks.length} verified unopened packs`);
     return unopenedPacks;
   } catch (error) {
     console.error('Failed to fetch unopened packs:', error);
