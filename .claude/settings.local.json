@@ -14,7 +14,8 @@
       "Bash(npx:*)",
       "Bash(npm view:*)",
       "Bash(npm search:*)",
-      "Bash(curl:*)"
+      "Bash(curl:*)",
+      "Bash(npm run dev:*)"
     ]
   }
 }
