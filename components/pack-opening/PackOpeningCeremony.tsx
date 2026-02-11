@@ -12,9 +12,10 @@ import { PackSummary } from './PackSummary'
 interface PackOpeningCeremonyProps {
   packId: string
   packName?: string
+  packImage?: string
 }
 
-export function PackOpeningCeremony({ packId, packName = 'Mystery Pack' }: PackOpeningCeremonyProps) {
+export function PackOpeningCeremony({ packId, packName = 'Mystery Pack', packImage }: PackOpeningCeremonyProps) {
   const router = useRouter()
   const { wallets } = useWallets()
   const [state, setState] = useState<PackOpeningState>('LOADING')
@@ -163,7 +164,7 @@ export function PackOpeningCeremony({ packId, packName = 'Mystery Pack' }: PackO
             {cards.map((_, i) => (
               <div
                 key={i}
-                className="absolute inset-0 rounded-xl"
+                className="absolute inset-0 rounded-xl overflow-hidden"
                 style={{
                   background: 'linear-gradient(135deg, #1e1b4b 0%, #312e81 50%, #1e1b4b 100%)',
                   border: '2px solid #4c1d95',
@@ -171,9 +172,13 @@ export function PackOpeningCeremony({ packId, packName = 'Mystery Pack' }: PackO
                   boxShadow: '0 10px 30px rgba(0,0,0,0.5)',
                 }}
               >
-                <div className="w-full h-full flex items-center justify-center">
-                  <span className="text-4xl">🎴</span>
-                </div>
+                {packImage ? (
+                  <img src={packImage} alt={packName} className="w-full h-full object-cover scale-110" />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center">
+                    <span className="text-4xl">🎴</span>
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -203,6 +208,7 @@ export function PackOpeningCeremony({ packId, packName = 'Mystery Pack' }: PackO
                 index={index}
                 isActive={index <= currentRevealIndex}
                 onFlipComplete={handleCardFlipComplete}
+                packImage={packImage}
               />
             ))}
           </div>

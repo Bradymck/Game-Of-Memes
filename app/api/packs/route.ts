@@ -1,45 +1,65 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+export const dynamic = 'force-dynamic';
+
 const WIELD_API_KEY = process.env.WIELD_API_KEY;
-const ALCHEMY_API_KEY = process.env.ALCHEMY_API_KEY;
+const BASE_RPC = 'https://mainnet.base.org';
+const TOKEN_URI_SELECTOR = '0xc87b56dd'; // tokenURI(uint256)
 
 // Cache for collection metadata to avoid repeated API calls
 const collectionCache = new Map<string, { name: string; image: string }>();
 
+async function getTokenURI(contractAddress: string, tokenId: string): Promise<string | null> {
+  try {
+    const paddedId = BigInt(tokenId).toString(16).padStart(64, '0');
+    const response = await fetch(BASE_RPC, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        method: 'eth_call',
+        params: [{ to: contractAddress, data: `${TOKEN_URI_SELECTOR}${paddedId}` }, 'latest'],
+        id: 1,
+      }),
+    });
+    const data = await response.json();
+    if (!data.result || data.result === '0x') return null;
+
+    // Decode ABI-encoded string
+    const hex = data.result.slice(2);
+    const offset = parseInt(hex.slice(0, 64), 16) * 2;
+    const length = parseInt(hex.slice(offset, offset + 64), 16);
+    const strHex = hex.slice(offset + 64, offset + 64 + length * 2);
+    return Buffer.from(strHex, 'hex').toString('utf-8');
+  } catch (e) {
+    console.error(`Failed to read tokenURI for ${contractAddress}/${tokenId}:`, e);
+    return null;
+  }
+}
+
 async function getCollectionMetadata(contractAddress: string, tokenId: string): Promise<{ name: string; image: string }> {
-  // Check cache first
   if (collectionCache.has(contractAddress)) {
     return collectionCache.get(contractAddress)!;
   }
 
-  // Fetch from Alchemy - try the given token first, then fall back to token #1
-  const tokensToTry = [tokenId, '1'];
-
-  for (const tryTokenId of tokensToTry) {
+  // Read tokenURI directly from on-chain
+  const uri = await getTokenURI(contractAddress, tokenId);
+  if (uri) {
     try {
-      const url = `https://base-mainnet.g.alchemy.com/nft/v3/${ALCHEMY_API_KEY}/getNFTMetadata?contractAddress=${contractAddress}&tokenId=${tryTokenId}&refreshCache=false`;
-      const response = await fetch(url);
-      if (response.ok) {
-        const data = await response.json();
-        // Try multiple image sources - some tokens may not have cached images
-        const image = data.image?.cachedUrl
-          || data.image?.thumbnailUrl
-          || data.image?.originalUrl
-          || data.raw?.metadata?.image
-          || null;
-
+      const metaResponse = await fetch(uri);
+      if (metaResponse.ok) {
+        const meta = await metaResponse.json();
+        const image = meta.image || meta.imageUrl || null;
+        const name = meta.name?.replace(/#\d+$/, '').trim() || 'Unknown Pack';
         if (image) {
-          const metadata = {
-            name: data.contract?.name || data.raw?.metadata?.name?.replace(/#\d+$/, '').trim() || 'Unknown Pack',
-            image,
-          };
+          const metadata = { name, image };
           collectionCache.set(contractAddress, metadata);
-          console.log(`✅ Got metadata for ${contractAddress} from token ${tryTokenId}:`, metadata.name);
+          console.log(`✅ Got metadata for ${contractAddress} via tokenURI:`, metadata.name, metadata.image);
           return metadata;
         }
       }
     } catch (e) {
-      console.error(`Failed to fetch metadata for token ${tryTokenId}:`, e);
+      console.error(`Failed to fetch tokenURI metadata for ${contractAddress}:`, e);
     }
   }
 
@@ -62,8 +82,8 @@ export async function GET(request: NextRequest) {
   console.log('📦 API: Fetching unopened packs from Vibe Market for', ownerAddress);
 
   try {
-    // Use Vibe Market API with status=minted to get ONLY unopened packs
-    const url = `https://build.wield.xyz/vibe/boosterbox/owner/${ownerAddress}?status=minted&chainId=8453&limit=200`;
+    // Fetch ALL tokens for this owner, filter unopened locally (more reliable than status=minted)
+    const url = `https://build.wield.xyz/vibe/boosterbox/owner/${ownerAddress}?chainId=8453&limit=200`;
 
     console.log('🔍 Vibe Market API URL:', url);
 
@@ -83,13 +103,23 @@ export async function GET(request: NextRequest) {
 
     const data = await response.json();
 
-    // Vibe Market API returns { success: true, boxes: [...] }
-    const items = data?.boxes || [];
+    // API may return { boxes: [...] } or { data: [...] } depending on endpoint version
+    const allItems = data?.boxes || data?.data || [];
 
-    if (!Array.isArray(items)) {
-      console.log('⚠️ boxes is not an array:', typeof items);
+    if (!Array.isArray(allItems)) {
+      console.log('⚠️ Response items not an array:', typeof allItems, 'keys:', Object.keys(data));
       return NextResponse.json({ packs: [] });
     }
+
+    console.log(`📦 Wield API returned ${allItems.length} total tokens`);
+
+    // Filter to unopened only: rarity === 0 means unopened
+    const items = allItems.filter((item: any) => {
+      const rarity = item.rarity ?? -1;
+      return rarity === 0;
+    });
+
+    console.log(`📦 ${items.length} unopened packs (rarity === 0) of ${allItems.length} total`);
 
     // Get unique contract addresses and fetch their metadata
     const uniqueContracts = [...new Set(items.map((item: any) => item.contractAddress))];
