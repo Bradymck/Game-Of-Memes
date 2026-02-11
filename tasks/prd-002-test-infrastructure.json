@@ -1,0 +1,32 @@
+{
+  "id": "PRD-002",
+  "title": "Add Test Infrastructure (Scribe Foundation)",
+  "status": "pending",
+  "agent": "scribe",
+  "priority": "P1",
+  "description": "Game of Memes has zero tests. Add Vitest + React Testing Library for unit/component tests, and a Playwright test that loads the game board and verifies core UI elements render. This is the 'eyes' for the autonomous build loop — Scribe needs to verify that changes don't break the game.",
+  "acceptance_criteria": [
+    "vitest and @testing-library/react installed as devDependencies",
+    "vitest.config.ts configured for Next.js 16 + React 19",
+    "At least 1 unit test for aiOpponent.ts (getAIActions returns valid actions)",
+    "At least 1 component test for game-context.tsx (GameProvider initializes state)",
+    "At least 1 Playwright test that navigates to localhost:3000 and verifies board renders",
+    "npm test script added to package.json",
+    "All tests pass"
+  ],
+  "files_to_create": [
+    "vitest.config.ts",
+    "lib/__tests__/aiOpponent.test.ts",
+    "lib/__tests__/game-context.test.tsx",
+    "e2e/game-board.spec.ts"
+  ],
+  "dependencies_to_add": [
+    "vitest",
+    "@testing-library/react",
+    "@testing-library/jest-dom",
+    "@vitejs/plugin-react",
+    "jsdom",
+    "@playwright/test"
+  ],
+  "created": "2026-02-11"
+}

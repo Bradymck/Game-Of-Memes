@@ -1,0 +1,34 @@
+{
+  "id": "PRD-001",
+  "title": "Wire AI Opponent into Game Context",
+  "status": "completed",
+  "agent": "pixel",
+  "priority": "P1",
+  "description": "The aiOpponent.ts module has proper AI logic (getAIActions — play cards by mana cost, 70/30 face-vs-trade decisions) but was completely disconnected from game-context.tsx. The inline AI in endTurn only attacked face with existing minions and never played cards. This PRD wires the real AI into the game loop.",
+  "changes": [
+    {
+      "file": "lib/game-context.tsx",
+      "action": "modify",
+      "description": "Add opponentHand to GameState, import getAIActions, rewrite endTurn to use AI decisions (draw card, play cards from hand, attack with strategy), update card initialization to give opponent a hand of 3 + 1 on field"
+    },
+    {
+      "file": "components/game-board.tsx",
+      "action": "modify",
+      "description": "Destructure opponentHand from useGame(), replace hardcoded [...Array(4)] with real opponentHand.length for opponent hand display"
+    }
+  ],
+  "verification": {
+    "typecheck": "npx tsc --noEmit — no new errors in modified files",
+    "visual": "Game renders at localhost:3000, board layout intact, ghost cards show when no wallet connected",
+    "functional": [
+      "AI draws a card from deck each turn",
+      "AI plays cards from hand when mana allows (expensive first)",
+      "AI attacks with 70% face / 30% trade strategy",
+      "AI minion-on-minion combat resolves damage and removes dead",
+      "Opponent hand display reflects real card count",
+      "Graveyard recycling works for opponent when deck empty"
+    ]
+  },
+  "created": "2026-02-11",
+  "completed": "2026-02-11"
+}
