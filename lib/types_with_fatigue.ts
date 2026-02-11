@@ -42,7 +42,7 @@ export interface Player {
   hand: Card[];
   board: BoardCard[];
   graveyard: Card[];
-  fatigueCounter: number;
+  fatigueCounter: number; // Tracks fatigue damage (increases each time deck is empty)
 }
 
 // Card on board (has current stats that can differ from base card)

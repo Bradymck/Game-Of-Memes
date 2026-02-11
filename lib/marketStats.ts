@@ -17,8 +17,8 @@ export function calculateAttack(price: number): number {
   return 1;
 }
 
-// Defense based on market cap milestones
-export function calculateDefense(marketCap: number): number {
+// Health based on market cap milestones
+export function calculateHealth(marketCap: number): number {
   if (marketCap >= 100_000_000) return 6; // $100M+
   if (marketCap >= 10_000_000) return 5;  // $10M+
   if (marketCap >= 1_000_000) return 4;   // $1M+
@@ -28,8 +28,8 @@ export function calculateDefense(marketCap: number): number {
 }
 
 // Cost based on combined power
-export function calculateCost(attack: number, defense: number): number {
-  const totalStats = attack + defense;
+export function calculateCost(attack: number, health: number): number {
+  const totalStats = attack + health;
   if (totalStats >= 12) return 10;
   if (totalStats >= 10) return 8;
   if (totalStats >= 8) return 6;
@@ -60,13 +60,13 @@ export function isCardPlayable(liquidity: number): boolean {
 // Calculate all stats from market data
 export function calculateCardStats(marketData: MarketData) {
   const attack = calculateAttack(marketData.price);
-  const defense = calculateDefense(marketData.marketCap);
-  const cost = calculateCost(attack, defense);
+  const health = calculateHealth(marketData.marketCap);
+  const cost = calculateCost(attack, health);
   const rarity = calculateRarity(marketData.marketCap, marketData.liquidity);
 
   return {
     attack,
-    defense,
+    health,
     cost,
     rarity,
     isPlayable: isCardPlayable(marketData.liquidity),

@@ -1,18 +1,17 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { Card as CardType } from '@/lib/types';
+import { Card as CardType, BoardCard } from '@/lib/types';
 
 interface CardProps {
-  card: CardType;
+  card: CardType | BoardCard;
   onClick?: () => void;
   isPlayable?: boolean;
   isInHand?: boolean;
   isSelected?: boolean;
-  position?: number;
 }
 
-export default function Card({ card, onClick, isPlayable = false, isInHand = false, isSelected = false, position = 0 }: CardProps) {
+export default function Card({ card, onClick, isPlayable = false, isInHand = false, isSelected = false }: CardProps) {
   const rarityColors = {
     common: 'from-gray-600 to-gray-800',
     rare: 'from-blue-600 to-blue-800',
@@ -27,6 +26,8 @@ export default function Card({ card, onClick, isPlayable = false, isInHand = fal
     legendary: 'shadow-orange-500/50',
   };
 
+  const hasTaunt = card.effect === 'taunt';
+
   return (
     <motion.div
       initial={isInHand ? { y: 20, opacity: 0 } : { scale: 0 }}
@@ -40,6 +41,7 @@ export default function Card({ card, onClick, isPlayable = false, isInHand = fal
         shadow-lg ${isPlayable ? `${rarityGlow[card.rarity]} hover:shadow-xl` : ''}
         ${!isPlayable && !isSelected && 'opacity-60 cursor-not-allowed'}
         ${isSelected && 'ring-4 ring-yellow-400 scale-105'}
+        ${hasTaunt && 'ring-4 ring-amber-500 shadow-amber-500/50'}
       `}
       onClick={isPlayable ? onClick : undefined}
     >
@@ -47,6 +49,13 @@ export default function Card({ card, onClick, isPlayable = false, isInHand = fal
       <div className="absolute top-2 left-2 w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center font-bold text-white shadow-md z-10">
         {card.cost}
       </div>
+
+      {/* Taunt Shield Icon */}
+      {hasTaunt && (
+        <div className="absolute top-2 left-1/2 transform -translate-x-1/2 w-8 h-8 rounded-full bg-amber-500 flex items-center justify-center font-bold text-white shadow-lg z-10 border-2 border-amber-300">
+          🛡️
+        </div>
+      )}
 
       {/* Card Image */}
       <div className="relative w-full h-20 overflow-hidden bg-black/20">
@@ -88,14 +97,14 @@ export default function Card({ card, onClick, isPlayable = false, isInHand = fal
       <div className="absolute bottom-2 left-0 right-0 flex justify-between px-3">
         {/* Attack */}
         <div className="w-7 h-7 rounded bg-red-600 flex items-center justify-center font-bold text-white text-sm shadow-md">
-          ⚔️{'currentAttack' in card ? card.currentAttack : card.attack}
+          ⚔️{('currentAttack' in card) ? (card as BoardCard).currentAttack : card.attack}
         </div>
 
         {/* Health */}
         <div className={`w-7 h-7 rounded flex items-center justify-center font-bold text-white text-sm shadow-md ${
-          'currentHealth' in card && card.currentHealth < card.health ? 'bg-red-600' : 'bg-green-600'
+          ('currentHealth' in card) && (card as BoardCard).currentHealth < card.health ? 'bg-red-600' : 'bg-green-600'
         }`}>
-          ❤️{'currentHealth' in card ? card.currentHealth : card.health}
+          ❤️{('currentHealth' in card) ? (card as BoardCard).currentHealth : card.health}
         </div>
       </div>
 

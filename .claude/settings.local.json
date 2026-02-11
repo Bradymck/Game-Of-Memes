@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(tree:*)",
+      "Bash(cat:*)",
+      "Bash(npm run build:*)",
+      "Bash(npm run lint:*)",
+      "Bash(find:*)",
+      "Bash(npm ls:*)",
+      "Bash(ls:*)",
+      "Bash(mkdir:*)",
+      "Bash(lsof:*)",
+      "Bash(npx next build:*)",
+      "Bash(npx:*)",
+      "Bash(npm view:*)",
+      "Bash(npm search:*)",
+      "Bash(curl:*)"
+    ]
+  }
+}
