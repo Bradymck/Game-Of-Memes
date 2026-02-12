@@ -36,6 +36,11 @@ export function PackOpeningCeremony({
     setState("READY_TO_REVEAL");
   }, []);
 
+  // Background image updates — swap in unique art as it propagates
+  const handleImagesUpdated = useCallback((updatedCards: PackCard[]) => {
+    setCards(updatedCards);
+  }, []);
+
   const handleError = useCallback((errorMessage: string) => {
     console.error("Pack opening error:", errorMessage);
     setError(errorMessage);
@@ -45,6 +50,7 @@ export function PackOpeningCeremony({
   const { status, startPolling } = usePythVRF({
     packId,
     onConfirmed: handleVRFConfirmed,
+    onImagesUpdated: handleImagesUpdated,
     onError: handleError,
   });
 

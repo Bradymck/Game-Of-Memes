@@ -30,12 +30,14 @@ function ipfsToHttp(uri: string): string {
 interface UsePythVRFOptions {
   packId: string; // format: "contractAddress-tokenId"
   onConfirmed?: (cards: PackCard[]) => void;
+  onImagesUpdated?: (cards: PackCard[]) => void;
   onError?: (error: string) => void;
 }
 
 export function usePythVRF({
   packId,
   onConfirmed,
+  onImagesUpdated,
   onError,
 }: UsePythVRFOptions) {
   const [status, setStatus] = useState<VRFStatus>({ isConfirmed: false });
@@ -379,11 +381,12 @@ export function usePythVRF({
         );
       }
 
-      // Phase 2: Wait for Wield metadata server to propagate, then fetch
+      // Phase 2: Deliver cards IMMEDIATELY with rarity info.
+      // Don't block waiting for images — the ceremony shows rarity glow
+      // and "Image loading..." if images aren't ready yet.
       console.log(
-        `✅ ${revealedRarities.size} rarities confirmed. Waiting for card images to propagate...`,
+        `✅ ${revealedRarities.size} rarities confirmed. Building cards...`,
       );
-      await new Promise((resolve) => setTimeout(resolve, 8000));
 
       // Helper to fetch metadata for all revealed tokens
       const fetchAllCardMetadata = async (): Promise<PackCard[]> => {
@@ -399,9 +402,7 @@ export function usePythVRF({
             return {
               id: `${parsed.contractAddress}-${tokenId}`,
               name: metadata.name || `Card #${tokenId}`,
-              image: ipfsToHttp(
-                metadata.image || metadata.imageUrl || "/placeholder.jpg",
-              ),
+              image: ipfsToHttp(metadata.image || metadata.imageUrl || ""),
               ticker:
                 metadata.attributes?.find((a: any) => a.trait_type === "Ticker")
                   ?.value || "",
@@ -422,44 +423,38 @@ export function usePythVRF({
           .map((r) => r.value);
       };
 
-      // Fetch metadata with retry — if all images are identical, the Wield
-      // server hasn't propagated unique card art yet (still showing pack cover)
-      let revealedCards: PackCard[] = [];
-      let metadataRetries = 0;
-      const maxMetadataRetries = 5;
+      // Quick first attempt — brief wait for fast propagation
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+      let revealedCards = await fetchAllCardMetadata();
 
-      while (metadataRetries <= maxMetadataRetries) {
-        revealedCards = await fetchAllCardMetadata();
-
-        // Check if all images are identical (pack cover not yet updated)
-        const imageSet = new Set(revealedCards.map((c) => c.image));
-        const hasUniqueImages = imageSet.size > 1 || revealedCards.length <= 1;
-
-        if (hasUniqueImages) {
-          console.log(
-            `✅ All ${revealedCards.length} cards have unique images`,
-          );
-          break;
-        }
-
-        metadataRetries++;
-        if (metadataRetries <= maxMetadataRetries) {
-          console.log(
-            `⏳ All images identical (pack cover still showing), retrying in 8s (${metadataRetries}/${maxMetadataRetries})`,
-          );
-          await new Promise((resolve) => setTimeout(resolve, 8000));
-        } else {
-          console.warn(
-            "⚠️ Metadata not fully propagated after retries — keeping current images",
-          );
-          // Keep whatever images we have (even pack cover) — better than empty.
-          // The /api/cards endpoint will fetch fresh metadata when the user
-          // loads the game board, by which time propagation should be complete.
-        }
+      // If fetch failed entirely, build cards from rarity data alone (no images)
+      if (revealedCards.length === 0) {
+        revealedCards = Array.from(revealedRarities.entries()).map(
+          ([tokenId, rarity]) => ({
+            id: `${parsed.contractAddress}-${tokenId}`,
+            name: `Card #${tokenId}`,
+            image: "",
+            ticker: "",
+            rarity: rarityMap[rarity] || "common",
+            attack: 3,
+            health: 3,
+            mana: 2,
+            isRevealed: false,
+          }),
+        );
       }
 
-      console.log(`✅ ${revealedCards.length} cards ready`);
+      console.log(
+        `🎴 ${revealedCards.length} cards ready — delivering to ceremony`,
+      );
 
+      // Check if images are unique already
+      const imageSet = new Set(
+        revealedCards.map((c) => c.image).filter(Boolean),
+      );
+      const hasUniqueImages = imageSet.size > 1 || revealedCards.length <= 1;
+
+      // Deliver cards to ceremony IMMEDIATELY — don't wait for perfect images
       setCards(revealedCards);
       setStatus({
         isConfirmed: true,
@@ -467,6 +462,39 @@ export function usePythVRF({
       });
       setIsPolling(false);
       onConfirmed?.(revealedCards);
+
+      // If images aren't unique yet, poll in the background and push updates
+      if (!hasUniqueImages && revealedCards.length > 1) {
+        console.log(
+          "🔄 Images not unique yet — starting background image updater",
+        );
+        (async () => {
+          for (let i = 0; i < 12; i++) {
+            await new Promise((resolve) => setTimeout(resolve, 8000));
+            try {
+              const updated = await fetchAllCardMetadata();
+              const updatedSet = new Set(
+                updated.map((c) => c.image).filter(Boolean),
+              );
+              if (updatedSet.size > 1) {
+                console.log(`✅ Unique card images arrived (attempt ${i + 1})`);
+                setCards(updated);
+                onImagesUpdated?.(updated);
+                return;
+              }
+              console.log(
+                `⏳ Background image check ${i + 1}/12 — still waiting...`,
+              );
+            } catch {
+              // Ignore fetch errors in background
+            }
+          }
+          console.warn(
+            "⚠️ Background image updater gave up after ~96s — images will update on next game load",
+          );
+        })();
+      }
+
       return;
     } catch (error: any) {
       console.error("Pack opening error:", error);
@@ -500,7 +528,14 @@ export function usePythVRF({
 
       onError?.(errorMessage);
     }
-  }, [packId, wallets, activeWalletAddress, onConfirmed, onError]);
+  }, [
+    packId,
+    wallets,
+    activeWalletAddress,
+    onConfirmed,
+    onImagesUpdated,
+    onError,
+  ]);
 
   return {
     status,

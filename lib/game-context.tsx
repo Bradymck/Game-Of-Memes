@@ -714,6 +714,12 @@ export function GameProvider({ children }: { children: ReactNode }) {
   }, [user?.wallet?.address]);
 
   const resetGame = useCallback(async () => {
+    // Use drafted cards if we came from a draft, otherwise all user cards
+    const playerDeck =
+      draftedCardsRef.current && draftedCardsRef.current.length > 0
+        ? draftedCardsRef.current
+        : userCards;
+
     // Fetch a fresh AI deck (potentially different collection), excluding player's
     try {
       const excludeParam = playerContracts[0]
@@ -728,16 +734,16 @@ export function GameProvider({ children }: { children: ReactNode }) {
           setAiPackImage(data.packImage);
           localStorage.setItem("gom:aiPackImage", data.packImage);
         }
-        if (userCards.length > 0) {
-          initGameFromCards(userCards, data.cards);
+        if (playerDeck.length > 0) {
+          initGameFromCards(playerDeck, data.cards);
           return;
         }
       }
     } catch {
       // Fall through to existing AI cards
     }
-    if (userCards.length > 0) {
-      initGameFromCards(userCards, aiCards.length > 0 ? aiCards : undefined);
+    if (playerDeck.length > 0) {
+      initGameFromCards(playerDeck, aiCards.length > 0 ? aiCards : undefined);
     }
   }, [userCards, aiCards, playerContracts, initGameFromCards]);
 
