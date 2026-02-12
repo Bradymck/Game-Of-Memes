@@ -68,7 +68,10 @@ export function GameBoard() {
   }, [lastDamage]);
 
   return (
-    <div className="relative w-full h-screen overflow-hidden">
+    <div
+      className="relative w-full h-screen overflow-hidden"
+      data-testid="game-board"
+    >
       {/* Epic 3D Meme Background! */}
       <MemeBackground />
 
@@ -122,20 +125,25 @@ export function GameBoard() {
             {/* Opponent Center (Hero + Minions) */}
             <div className="row-start-1 col-start-2 flex flex-col items-center justify-start gap-6 pt-4">
               {/* Opponent Hero */}
-              <HeroPortrait
-                health={opponentHealth}
-                mana={opponentMana}
-                maxMana={maxOpponentMana}
-                isPlayer={false}
-                isTargetable={!!selectedAttacker}
-                onClick={() => selectedAttacker && attackHero()}
-                damageTaken={
-                  lastDamage?.targetId === null ? lastDamage.amount : null
-                }
-              />
+              <div data-testid="opponent-health">
+                <HeroPortrait
+                  health={opponentHealth}
+                  mana={opponentMana}
+                  maxMana={maxOpponentMana}
+                  isPlayer={false}
+                  isTargetable={!!selectedAttacker}
+                  onClick={() => selectedAttacker && attackHero()}
+                  damageTaken={
+                    lastDamage?.targetId === null ? lastDamage.amount : null
+                  }
+                />
+              </div>
 
               {/* Opponent Minions */}
-              <div className="flex items-center justify-center gap-3 min-h-[120px]">
+              <div
+                className="flex items-center justify-center gap-3 min-h-[120px]"
+                data-testid="opponent-field"
+              >
                 {opponentField.length === 0 ? (
                   <div className="text-amber-100/30 text-sm italic">
                     No minions
@@ -205,7 +213,7 @@ export function GameBoard() {
                 <span className="text-amber-200/60 text-xs uppercase tracking-wide font-bold">
                   AI Difficulty
                 </span>
-                <div className="flex gap-2">
+                <div className="flex gap-2" data-testid="difficulty-selector">
                   <button
                     onClick={() => setDifficulty("easy")}
                     className={cn(
@@ -248,6 +256,7 @@ export function GameBoard() {
               {/* End Turn Button */}
               <div className="absolute right-8">
                 <button
+                  data-testid="end-turn-button"
                   onClick={endTurn}
                   disabled={!isPlayerTurn}
                   className={cn(
@@ -310,6 +319,7 @@ export function GameBoard() {
               <div
                 className="flex items-center justify-center gap-3 min-h-[120px] w-full px-4 py-6 rounded-xl transition-all border-2 border-dashed border-transparent"
                 data-play-field="true"
+                data-testid="player-field"
               >
                 {playerField.length === 0 ? (
                   <div className="text-amber-100/30 text-sm italic">
@@ -378,22 +388,29 @@ export function GameBoard() {
               </div>
 
               {/* Player Hero */}
-              <HeroPortrait
-                health={playerHealth}
-                mana={playerMana}
-                maxMana={maxPlayerMana}
-                isPlayer
-                image={
-                  user?.wallet?.address
-                    ? `https://metadata.ens.domains/mainnet/avatar/${user.wallet.address.toLowerCase()}`
-                    : undefined
-                }
-              />
+              <div data-testid="player-health">
+                <div data-testid="player-mana">
+                  <HeroPortrait
+                    health={playerHealth}
+                    mana={playerMana}
+                    maxMana={maxPlayerMana}
+                    isPlayer
+                    image={
+                      user?.wallet?.address
+                        ? `https://metadata.ens.domains/mainnet/avatar/${user.wallet.address.toLowerCase()}`
+                        : undefined
+                    }
+                  />
+                </div>
+              </div>
             </div>
           </div>
 
           {/* Player Hand Zone - OUTSIDE GRID, Bottom Right Corner */}
-          <div className="absolute bottom-12 right-2 w-96 h-28 z-[100]">
+          <div
+            className="absolute bottom-12 right-2 w-96 h-28 z-[100]"
+            data-testid="player-hand"
+          >
             <DraggableHand
               cards={playerHand}
               playerMana={playerMana}
