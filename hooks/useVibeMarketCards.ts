@@ -37,8 +37,8 @@ export function useVibeMarketCards() {
         console.log("Fetched cards from API:", apiCards.length);
 
         const rarityStats = {
-          common: { attack: 2, health: 2, mana: 2 },
-          rare: { attack: 3, health: 3, mana: 3 },
+          common: { attack: 1, health: 1, mana: 1 },
+          rare: { attack: 2, health: 3, mana: 2 },
           epic: { attack: 4, health: 5, mana: 4 },
           legendary: { attack: 6, health: 6, mana: 5 },
         };

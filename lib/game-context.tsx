@@ -188,10 +188,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
         playerDeck: shuffledPlayer.slice(4),
         playerField: [],
         playerGraveyard: [],
-        opponentHand: shuffledAI.slice(0, 3),
-        opponentField: shuffledAI
-          .slice(3, 4)
-          .map((c) => ({ ...c, canAttack: false })),
+        opponentHand: shuffledAI.slice(0, 4),
+        opponentField: [],
         opponentDeck: shuffledAI.slice(4),
         opponentGraveyard: [],
         playerMana: 1,
