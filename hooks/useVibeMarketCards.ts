@@ -8,13 +8,14 @@ export function useVibeMarketCards() {
   const { authenticated, user } = usePrivy();
   const [cards, setCards] = useState<MemeCardData[]>([]);
   const [contractAddresses, setContractAddresses] = useState<string[]>([]);
-  const [packImage, setPackImage] = useState<string>(() => {
-    if (typeof window !== "undefined") {
-      return localStorage.getItem("gom:playerPackImage") || "";
-    }
-    return "";
-  });
+  const [packImage, setPackImage] = useState<string>("");
   const [loading, setLoading] = useState(false);
+
+  // Load cached pack image after hydration (avoids SSR mismatch)
+  useEffect(() => {
+    const cached = localStorage.getItem("gom:playerPackImage");
+    if (cached) setPackImage(cached);
+  }, []);
 
   useEffect(() => {
     if (!authenticated || !user?.wallet?.address) {

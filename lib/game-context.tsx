@@ -92,12 +92,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
   // AI deck from top VibeMarket collections
   const [aiCards, setAiCards] = useState<MemeCardData[]>([]);
   const [aiCollectionName, setAiCollectionName] = useState<string>("");
-  const [aiPackImage, setAiPackImage] = useState<string>(() => {
-    if (typeof window !== "undefined") {
-      return localStorage.getItem("gom:aiPackImage") || "";
-    }
-    return "";
-  });
+  const [aiPackImage, setAiPackImage] = useState<string>("");
   const [playerPackImage, setPlayerPackImage] = useState<string>("");
 
   const fetchAiDeck = useCallback(async (excludeContract?: string) => {
@@ -288,6 +283,12 @@ export function GameProvider({ children }: { children: ReactNode }) {
     );
     initGameFromCards(playerDeck, aiCards);
   }, [userCards, aiCards, initGameFromCards]);
+
+  // Load cached pack images from localStorage after hydration
+  useEffect(() => {
+    const cachedAi = localStorage.getItem("gom:aiPackImage");
+    if (cachedAi) setAiPackImage(cachedAi);
+  }, []);
 
   // Set player pack image when it loads from the cards API
   useEffect(() => {
