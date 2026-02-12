@@ -301,12 +301,12 @@ export function usePythVRF({
       const receipt = await tx.wait();
       console.log("Open tx confirmed:", receipt.hash);
 
-      // Step 1: Poll for VRF fulfillment (rarity > 0) via on-chain reads
-      // The Wield API is unreliable for images, so we go straight to on-chain
+      // Phase 1: Poll for VRF fulfillment (rarity only, no metadata)
+      // On-chain rarity updates instantly via VRF callback, but
+      // the Wield metadata server needs time to propagate unique card images.
       let attempts = 0;
       const maxAttempts = 120; // 60 seconds max (500ms intervals)
-      const revealedCards: PackCard[] = [];
-      const revealedTokenIds = new Set<string>();
+      const revealedRarities = new Map<string, number>();
 
       const rarityMap: Record<
         number,
@@ -320,20 +320,19 @@ export function usePythVRF({
       };
 
       console.log(
-        "⏳ Polling on-chain for VRF fulfillment on",
+        "⏳ Phase 1: Polling on-chain for VRF rarity on",
         validTokenIds.length,
         "tokens...",
       );
 
       while (
         attempts < maxAttempts &&
-        revealedCards.length < validTokenIds.length
+        revealedRarities.size < validTokenIds.length
       ) {
         await new Promise((resolve) => setTimeout(resolve, 500));
 
-        // Check all unrevealed tokens in parallel
         const unrevealedTokenIds = validTokenIds.filter(
-          (id) => !revealedTokenIds.has(id),
+          (id) => !revealedRarities.has(id),
         );
 
         const results = await Promise.allSettled(
@@ -342,32 +341,7 @@ export function usePythVRF({
               const rarityInfo = await contract.getTokenRarity(tokenId);
               const rarity = Number(rarityInfo.rarity);
               if (rarity === 0) return null;
-
-              // VRF fulfilled! Fetch metadata from tokenURI
-              const tokenUri = await contract.tokenURI(tokenId);
-              const httpUri = ipfsToHttp(tokenUri);
-              const metaResponse = await fetch(httpUri);
-              const metadata = await metaResponse.json();
-
-              return {
-                tokenId,
-                card: {
-                  id: `${parsed.contractAddress}-${tokenId}`,
-                  name: metadata.name || `Card #${tokenId}`,
-                  image: ipfsToHttp(
-                    metadata.image || metadata.imageUrl || "/placeholder.jpg",
-                  ),
-                  ticker:
-                    metadata.attributes?.find(
-                      (a: any) => a.trait_type === "Ticker",
-                    )?.value || "",
-                  rarity: rarityMap[rarity] || "common",
-                  attack: 3,
-                  health: 3,
-                  mana: 2,
-                  isRevealed: false,
-                } as PackCard,
-              };
+              return { tokenId, rarity };
             } catch {
               return null;
             }
@@ -376,12 +350,11 @@ export function usePythVRF({
 
         for (const result of results) {
           if (result.status === "fulfilled" && result.value) {
-            const { tokenId, card } = result.value;
-            if (!revealedTokenIds.has(tokenId)) {
-              revealedTokenIds.add(tokenId);
-              revealedCards.push(card);
+            const { tokenId, rarity } = result.value;
+            if (!revealedRarities.has(tokenId)) {
+              revealedRarities.set(tokenId, rarity);
               console.log(
-                `🎴 Card ${tokenId} revealed: ${card.rarity} (${revealedCards.length}/${validTokenIds.length})`,
+                `🎴 Token ${tokenId} rarity confirmed: ${rarityMap[rarity] || "unknown"} (${revealedRarities.size}/${validTokenIds.length})`,
               );
             }
           }
@@ -390,15 +363,91 @@ export function usePythVRF({
         attempts++;
         if (attempts % 20 === 0) {
           console.log(
-            `⏳ Still waiting... ${revealedCards.length}/${validTokenIds.length} revealed (attempt ${attempts}/${maxAttempts})`,
+            `⏳ Still waiting... ${revealedRarities.size}/${validTokenIds.length} rarities confirmed (attempt ${attempts}/${maxAttempts})`,
           );
         }
       }
 
-      if (revealedCards.length === 0) {
+      if (revealedRarities.size === 0) {
         throw new Error(
           "No cards revealed after polling. The VRF oracle may be slow - try again in a minute.",
         );
+      }
+
+      // Phase 2: Wait for Wield metadata server to propagate, then fetch
+      console.log(
+        `✅ ${revealedRarities.size} rarities confirmed. Waiting for card images to propagate...`,
+      );
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+
+      // Helper to fetch metadata for all revealed tokens
+      const fetchAllCardMetadata = async (): Promise<PackCard[]> => {
+        const tokenIds = Array.from(revealedRarities.keys());
+        const cardResults = await Promise.allSettled(
+          tokenIds.map(async (tokenId) => {
+            const tokenUri = await contract.tokenURI(tokenId);
+            const httpUri = ipfsToHttp(tokenUri);
+            const metaResponse = await fetch(httpUri);
+            const metadata = await metaResponse.json();
+            const rarity = revealedRarities.get(tokenId) || 1;
+
+            return {
+              id: `${parsed.contractAddress}-${tokenId}`,
+              name: metadata.name || `Card #${tokenId}`,
+              image: ipfsToHttp(
+                metadata.image || metadata.imageUrl || "/placeholder.jpg",
+              ),
+              ticker:
+                metadata.attributes?.find((a: any) => a.trait_type === "Ticker")
+                  ?.value || "",
+              rarity: rarityMap[rarity] || "common",
+              attack: 3,
+              health: 3,
+              mana: 2,
+              isRevealed: false,
+            } as PackCard;
+          }),
+        );
+
+        return cardResults
+          .filter(
+            (r): r is PromiseFulfilledResult<PackCard> =>
+              r.status === "fulfilled",
+          )
+          .map((r) => r.value);
+      };
+
+      // Fetch metadata with retry — if all images are identical, the Wield
+      // server hasn't propagated unique card art yet (still showing pack cover)
+      let revealedCards: PackCard[] = [];
+      let metadataRetries = 0;
+      const maxMetadataRetries = 3;
+
+      while (metadataRetries <= maxMetadataRetries) {
+        revealedCards = await fetchAllCardMetadata();
+
+        // Check if all images are identical (pack cover not yet updated)
+        const imageSet = new Set(revealedCards.map((c) => c.image));
+        const hasUniqueImages = imageSet.size > 1 || revealedCards.length <= 1;
+
+        if (hasUniqueImages) {
+          console.log(
+            `✅ All ${revealedCards.length} cards have unique images`,
+          );
+          break;
+        }
+
+        metadataRetries++;
+        if (metadataRetries <= maxMetadataRetries) {
+          console.log(
+            `⏳ All images identical (pack cover still showing), retrying in 5s (${metadataRetries}/${maxMetadataRetries})`,
+          );
+          await new Promise((resolve) => setTimeout(resolve, 5000));
+        } else {
+          console.warn(
+            "⚠️ Metadata images not yet propagated after retries, using current images",
+          );
+        }
       }
 
       console.log(`✅ ${revealedCards.length} cards ready`);

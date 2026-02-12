@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createPublicClient, http } from "viem";
+import { base } from "viem/chains";
 import { getPackTokenAddress } from "@/lib/vibemarket";
 import { fetchTokenMarketData } from "@/lib/tokenPriceAPI";
 import { calculateCardStats } from "@/lib/marketStats";
@@ -7,7 +9,33 @@ export const dynamic = "force-dynamic";
 
 const WIELD_API_KEY = process.env.WIELD_API_KEY;
 const BASE_RPC = "https://mainnet.base.org";
-const TOKEN_URI_SELECTOR = "0xc87b56dd"; // tokenURI(uint256)
+
+const PACK_ABI = [
+  {
+    name: "ownerOf",
+    type: "function",
+    stateMutability: "view",
+    inputs: [{ name: "tokenId", type: "uint256" }],
+    outputs: [{ type: "address" }],
+  },
+  {
+    name: "getTokenRarity",
+    type: "function",
+    stateMutability: "view",
+    inputs: [{ name: "tokenId", type: "uint256" }],
+    outputs: [
+      { name: "rarity", type: "uint8" },
+      { name: "randomValue", type: "uint256" },
+    ],
+  },
+  {
+    name: "tokenURI",
+    type: "function",
+    stateMutability: "view",
+    inputs: [{ name: "tokenId", type: "uint256" }],
+    outputs: [{ type: "string" }],
+  },
+] as const;
 
 function ipfsToHttp(uri: string): string {
   if (uri.startsWith("ipfs://")) {
@@ -16,73 +44,11 @@ function ipfsToHttp(uri: string): string {
   return uri;
 }
 
-async function getTokenURI(
-  contractAddress: string,
-  tokenId: string,
-): Promise<string | null> {
-  try {
-    const paddedId = BigInt(tokenId).toString(16).padStart(64, "0");
-    const response = await fetch(BASE_RPC, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        jsonrpc: "2.0",
-        method: "eth_call",
-        params: [
-          { to: contractAddress, data: `${TOKEN_URI_SELECTOR}${paddedId}` },
-          "latest",
-        ],
-        id: 1,
-      }),
-    });
-    const data = await response.json();
-    if (!data.result || data.result === "0x") return null;
-
-    const hex = data.result.slice(2);
-    const offset = parseInt(hex.slice(0, 64), 16) * 2;
-    const length = parseInt(hex.slice(offset, offset + 64), 16);
-    const strHex = hex.slice(offset + 64, offset + 64 + length * 2);
-    return Buffer.from(strHex, "hex").toString("utf-8");
-  } catch (e) {
-    console.error(
-      `Failed to read tokenURI for ${contractAddress}/${tokenId}:`,
-      e,
-    );
-    return null;
-  }
-}
-
-async function fetchTokenMetadata(
-  contractAddress: string,
-  tokenId: string,
-): Promise<{ name: string; image: string } | null> {
-  const uri = await getTokenURI(contractAddress, tokenId);
-  if (!uri) return null;
-
-  try {
-    const httpUri = ipfsToHttp(uri);
-    const res = await fetch(httpUri);
-    if (!res.ok) return null;
-    const meta = await res.json();
-    return {
-      name: meta.name || `Card #${tokenId}`,
-      image: ipfsToHttp(meta.image || meta.imageUrl || ""),
-    };
-  } catch (e) {
-    console.error(
-      `Failed to fetch metadata for ${contractAddress}/${tokenId}:`,
-      e,
-    );
-    return null;
-  }
-}
-
 /**
- * GET /api/cards?owner={address}&contract={contractAddress}&tokens=1,2,3
+ * GET /api/cards?owner={address}
  *
- * Polls the Wield API for revealed card metadata after VRF fulfillment.
- * Returns cards with rarity > 0 (revealed) and their metadata.
- * Falls back to on-chain tokenURI for cards missing images.
+ * Returns ONLY truly opened cards verified on-chain.
+ * Filters out unopened packs and cards without proper images.
  */
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -109,13 +75,10 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    // Step 1: Get all tokens from Wield API
     const url = `https://build.wield.xyz/vibe/boosterbox/owner/${ownerAddress}?chainId=8453&limit=200`;
-
     const response = await fetch(url, {
-      headers: {
-        "API-KEY": WIELD_API_KEY,
-        Accept: "application/json",
-      },
+      headers: { "API-KEY": WIELD_API_KEY, Accept: "application/json" },
       cache: "no-store",
     });
 
@@ -131,11 +94,11 @@ export async function GET(request: NextRequest) {
     const data = await response.json();
     const items = data?.boxes || data?.data || [];
 
-    if (!Array.isArray(items)) {
+    if (!Array.isArray(items) || items.length === 0) {
       return NextResponse.json({ cards: [], revealed: 0, total: 0 });
     }
 
-    // Filter to requested contract and token IDs
+    // Apply contract/token filters if specified
     const tokenSet = new Set(tokenFilter);
     const matched = items.filter((item: any) => {
       if (
@@ -148,6 +111,70 @@ export async function GET(request: NextRequest) {
       return true;
     });
 
+    // Step 2: On-chain verification via multicall
+    // Only return cards that are TRULY opened (on-chain rarity > 0) and owned
+    const client = createPublicClient({
+      chain: base,
+      transport: http(BASE_RPC),
+    });
+
+    const calls = matched.flatMap((item: any) => [
+      {
+        address: item.contractAddress as `0x${string}`,
+        abi: PACK_ABI,
+        functionName: "ownerOf" as const,
+        args: [BigInt(item.tokenId)],
+      },
+      {
+        address: item.contractAddress as `0x${string}`,
+        abi: PACK_ABI,
+        functionName: "getTokenRarity" as const,
+        args: [BigInt(item.tokenId)],
+      },
+    ]);
+
+    console.log(
+      `🔗 Cards multicall: ${calls.length} calls for ${matched.length} tokens`,
+    );
+    const results = await client.multicall({
+      contracts: calls,
+      allowFailure: true,
+    });
+
+    // Filter: must be owned AND on-chain rarity > 0 (truly opened)
+    const verifiedItems: any[] = [];
+    const onChainRarities = new Map<string, number>();
+
+    for (let i = 0; i < matched.length; i++) {
+      const ownerResult = results[i * 2];
+      const rarityResult = results[i * 2 + 1];
+
+      const isOwned =
+        ownerResult.status === "success" &&
+        (ownerResult.result as string).toLowerCase() ===
+          ownerAddress.toLowerCase();
+
+      // On-chain rarity: > 0 means opened, 0 or revert means unopened
+      const onChainRarity =
+        rarityResult.status === "success"
+          ? Number((rarityResult.result as [number, bigint])[0])
+          : 0;
+
+      if (isOwned && onChainRarity > 0) {
+        verifiedItems.push(matched[i]);
+        onChainRarities.set(String(matched[i].tokenId), onChainRarity);
+      }
+    }
+
+    console.log(
+      `📦 ${verifiedItems.length} verified opened cards of ${matched.length} total`,
+    );
+
+    if (verifiedItems.length === 0) {
+      return NextResponse.json({ cards: [], revealed: 0, total: 0 });
+    }
+
+    // Step 3: Build card data with metadata
     const rarityMap: Record<number, string> = {
       1: "common",
       2: "rare",
@@ -156,40 +183,70 @@ export async function GET(request: NextRequest) {
       5: "mythic",
     };
 
-    // Separate revealed (rarity > 0) from unrevealed
-    const revealedItems = matched.filter(
-      (item: any) => item.rarity && item.rarity > 0,
+    // Step 3b: Fetch on-chain tokenURI for ALL verified cards.
+    // Wield API returns the pack cover image for all cards — NOT the unique
+    // revealed card art. On-chain tokenURI is the only reliable source.
+    const uriCalls = verifiedItems.map((item: any) => ({
+      address: item.contractAddress as `0x${string}`,
+      abi: PACK_ABI,
+      functionName: "tokenURI" as const,
+      args: [BigInt(item.tokenId)],
+    }));
+
+    console.log(
+      `🎨 Fetching tokenURI for ${uriCalls.length} cards via multicall`,
+    );
+    const uriResults = await client.multicall({
+      contracts: uriCalls,
+      allowFailure: true,
+    });
+
+    // Fetch metadata JSON from each tokenURI
+    const metadataMap = new Map<
+      number,
+      { name: string; image: string; ticker: string }
+    >();
+    const metaPromises = uriResults.map(async (result, idx) => {
+      if (result.status !== "success") return;
+      try {
+        const tokenUri = result.result as string;
+        const httpUri = ipfsToHttp(tokenUri);
+        const metaResp = await fetch(httpUri, { cache: "no-store" });
+        if (metaResp.ok) {
+          const meta = await metaResp.json();
+          const image = ipfsToHttp(meta.image || meta.imageUrl || "");
+          const ticker =
+            meta.attributes?.find((a: any) => a.trait_type === "Ticker")
+              ?.value || "";
+          if (image && image !== "/placeholder.jpg") {
+            metadataMap.set(idx, {
+              name: meta.name || `Card #${verifiedItems[idx].tokenId}`,
+              image,
+              ticker,
+            });
+          }
+        }
+      } catch {
+        // Skip failed metadata fetches
+      }
+    });
+
+    await Promise.all(metaPromises);
+
+    console.log(
+      `🎨 Got on-chain metadata for ${metadataMap.size} of ${verifiedItems.length} cards`,
     );
 
-    // Build cards, fetching on-chain metadata for any missing images
-    const revealed = await Promise.all(
-      revealedItems.map(async (item: any) => {
-        let name = item.name || `Card #${item.tokenId}`;
-        let image = item.image || item.imageUrl || item.metadata?.image || "";
-        const ticker =
-          item.attributes?.find((a: any) => a.trait_type === "Ticker")?.value ||
-          "";
+    // Build card objects using on-chain metadata as primary source
+    const cards = verifiedItems
+      .map((item: any, idx: number) => {
+        const onChainMeta = metadataMap.get(idx);
+        const chainRarity = onChainRarities.get(String(item.tokenId)) || 1;
 
-        // If Wield API didn't return an image, fetch from on-chain tokenURI
-        if (!image || image === "/placeholder.jpg") {
-          console.log(
-            `🔍 Card #${item.tokenId}: no image from API, fetching tokenURI...`,
-          );
-          const onChainMeta = await fetchTokenMetadata(
-            item.contractAddress,
-            String(item.tokenId),
-          );
-          if (onChainMeta) {
-            name = onChainMeta.name || name;
-            image = onChainMeta.image || image;
-            console.log(
-              `✅ Card #${item.tokenId}: got image from tokenURI:`,
-              image,
-            );
-          }
-        } else {
-          image = ipfsToHttp(image);
-        }
+        // On-chain metadata is the source of truth for revealed card art
+        const name = onChainMeta?.name || item.name || `Card #${item.tokenId}`;
+        const image = onChainMeta?.image || "";
+        const ticker = onChainMeta?.ticker || "";
 
         return {
           id: `${item.contractAddress}-${item.tokenId}`,
@@ -197,60 +254,51 @@ export async function GET(request: NextRequest) {
           contractAddress: item.contractAddress,
           name,
           image: image || "/placeholder.jpg",
-          rarity: rarityMap[item.rarity] || "common",
+          rarity: rarityMap[chainRarity] || "common",
           ticker,
         };
-      }),
+      })
+      // FINAL FILTER: No ghost cards. Must have on-chain image.
+      .filter((card) => card.image && card.image !== "/placeholder.jpg");
+
+    console.log(
+      `✅ ${cards.length} cards with images (filtered ${verifiedItems.length - cards.length} without)`,
     );
 
-    // Enrich cards with market data
+    // Step 4: Enrich with market data
     const packTokenCache = new Map<string, string | null>();
 
     const enrichedCards = await Promise.all(
-      revealed.map(async (card: any) => {
-        // Get token address for this pack contract (cached)
+      cards.map(async (card: any) => {
         let tokenAddress = packTokenCache.get(card.contractAddress);
         if (tokenAddress === undefined) {
           tokenAddress = await getPackTokenAddress(card.contractAddress);
           packTokenCache.set(card.contractAddress, tokenAddress);
         }
 
-        // If no token address, use rarity-based stats
+        const rarityStats = {
+          common: { attack: 2, health: 2, mana: 2 },
+          rare: { attack: 3, health: 3, mana: 3 },
+          epic: { attack: 4, health: 5, mana: 4 },
+          legendary: { attack: 6, health: 6, mana: 5 },
+        };
+
         if (!tokenAddress) {
-          const rarityStats = {
-            common: { attack: 2, health: 2, mana: 2 },
-            rare: { attack: 3, health: 3, mana: 3 },
-            epic: { attack: 4, health: 5, mana: 4 },
-            legendary: { attack: 6, health: 6, mana: 5 },
-          };
           const stats =
             rarityStats[card.rarity as keyof typeof rarityStats] ||
             rarityStats.common;
-
           return { ...card, ...stats };
         }
 
-        // Fetch market data
         const marketData = await fetchTokenMarketData(tokenAddress);
-
-        // If market data unavailable, fall back to rarity
         if (!marketData) {
-          const rarityStats = {
-            common: { attack: 2, health: 2, mana: 2 },
-            rare: { attack: 3, health: 3, mana: 3 },
-            epic: { attack: 4, health: 5, mana: 4 },
-            legendary: { attack: 6, health: 6, mana: 5 },
-          };
           const stats =
             rarityStats[card.rarity as keyof typeof rarityStats] ||
             rarityStats.common;
-
           return { ...card, ...stats };
         }
 
-        // Calculate market-derived stats
         const marketStats = calculateCardStats(marketData);
-
         return {
           ...card,
           attack: marketStats.attack,
@@ -269,7 +317,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       cards: enrichedCards,
       revealed: enrichedCards.length,
-      total: tokenSet.size || matched.length,
+      total: matched.length,
     });
   } catch (error: any) {
     console.error("Failed to fetch cards:", error);

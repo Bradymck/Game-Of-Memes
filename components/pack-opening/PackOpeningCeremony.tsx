@@ -94,8 +94,14 @@ export function PackOpeningCeremony({
   }, [state, currentRevealIndex, cards.length]);
 
   // Navigation handlers
-  const handlePlayGame = () => router.push("/");
-  const handleOpenAnother = () => router.push("/draft");
+  const handlePlayGame = () => {
+    // Store drafted cards in sessionStorage so the game can use them immediately
+    // instead of waiting for the Wield API to propagate
+    if (cards.length > 0) {
+      sessionStorage.setItem("draftedCards", JSON.stringify(cards));
+    }
+    router.push("/");
+  };
   const handleShare = async () => {
     // TODO: Implement social sharing with html2canvas
     const shareText = `Just opened a pack in Game of Memes! Got ${cards.filter((c) => c.rarity === "legendary").length} legendary cards! 🎴`;
@@ -244,7 +250,6 @@ export function PackOpeningCeremony({
           packName={packName}
           cards={cards}
           onPlayGame={handlePlayGame}
-          onOpenAnother={handleOpenAnother}
           onShare={handleShare}
         />
       );

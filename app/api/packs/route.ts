@@ -1,10 +1,39 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createPublicClient, http } from "viem";
+import { base } from "viem/chains";
 
 export const dynamic = "force-dynamic";
 
 const WIELD_API_KEY = process.env.WIELD_API_KEY;
 const BASE_RPC = "https://mainnet.base.org";
-const TOKEN_URI_SELECTOR = "0xc87b56dd"; // tokenURI(uint256)
+
+// BoosterDropV2 ABI — only the functions we need
+const PACK_ABI = [
+  {
+    name: "ownerOf",
+    type: "function",
+    stateMutability: "view",
+    inputs: [{ name: "tokenId", type: "uint256" }],
+    outputs: [{ type: "address" }],
+  },
+  {
+    name: "getTokenRarity",
+    type: "function",
+    stateMutability: "view",
+    inputs: [{ name: "tokenId", type: "uint256" }],
+    outputs: [
+      { name: "rarity", type: "uint8" },
+      { name: "randomValue", type: "uint256" },
+    ],
+  },
+  {
+    name: "tokenURI",
+    type: "function",
+    stateMutability: "view",
+    inputs: [{ name: "tokenId", type: "uint256" }],
+    outputs: [{ type: "string" }],
+  },
+] as const;
 
 function ipfsToHttp(uri: string): string {
   if (uri.startsWith("ipfs://")) {
@@ -15,74 +44,6 @@ function ipfsToHttp(uri: string): string {
 
 // Cache collection metadata per contract address
 const collectionCache = new Map<string, { name: string; image: string }>();
-
-async function getCollectionMetadata(
-  contractAddress: string,
-  tokenId: string,
-): Promise<{ name: string; image: string }> {
-  if (collectionCache.has(contractAddress)) {
-    return collectionCache.get(contractAddress)!;
-  }
-
-  try {
-    // ONE eth_call to get tokenURI
-    const paddedId = BigInt(tokenId).toString(16).padStart(64, "0");
-    const rpcResp = await fetch(BASE_RPC, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        jsonrpc: "2.0",
-        method: "eth_call",
-        params: [
-          { to: contractAddress, data: `${TOKEN_URI_SELECTOR}${paddedId}` },
-          "latest",
-        ],
-        id: 1,
-      }),
-      cache: "no-store",
-    });
-    const rpcData = await rpcResp.json();
-
-    if (!rpcData.result || rpcData.result === "0x") {
-      console.log(`⚠️ No tokenURI for ${contractAddress.slice(0, 10)}...`);
-      return { name: "Unknown Pack", image: "/vibe.png" };
-    }
-
-    // Decode ABI-encoded string
-    const hex = rpcData.result.slice(2);
-    const offset = parseInt(hex.slice(0, 64), 16) * 2;
-    const length = parseInt(hex.slice(offset, offset + 64), 16);
-    const strHex = hex.slice(offset + 64, offset + 64 + length * 2);
-    const tokenUri = Buffer.from(strHex, "hex").toString("utf-8");
-
-    console.log(
-      `🔍 tokenURI for ${contractAddress.slice(0, 10)}...: ${tokenUri.slice(0, 80)}`,
-    );
-
-    // Fetch metadata from the URI (usually a Wield API URL)
-    const httpUri = ipfsToHttp(tokenUri);
-    const metaResp = await fetch(httpUri, { cache: "no-store" });
-    if (metaResp.ok) {
-      const meta = await metaResp.json();
-      const rawImage = meta.image || meta.imageUrl || "";
-      const image = rawImage ? ipfsToHttp(rawImage) : "/vibe.png";
-      const name = meta.name?.replace(/#\d+$/, "").trim() || "Unknown Pack";
-      const metadata = { name, image };
-      collectionCache.set(contractAddress, metadata);
-      console.log(
-        `✅ ${contractAddress.slice(0, 10)}...: ${name} | ${image.slice(0, 60)}`,
-      );
-      return metadata;
-    }
-  } catch (e: any) {
-    console.error(
-      `⚠️ Metadata failed for ${contractAddress.slice(0, 10)}...:`,
-      e.message?.slice(0, 100),
-    );
-  }
-
-  return { name: "Unknown Pack", image: "/vibe.png" };
-}
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -105,47 +66,139 @@ export async function GET(request: NextRequest) {
   console.log("📦 Fetching packs for", ownerAddress);
 
   try {
-    const url = `https://build.wield.xyz/vibe/boosterbox/owner/${ownerAddress}?chainId=8453&limit=200`;
-    const response = await fetch(url, {
+    // Step 1: Use Wield API for token ID discovery
+    // Wield knows which contracts/tokens exist, but its rarity data may be stale
+    const wieldUrl = `https://build.wield.xyz/vibe/boosterbox/owner/${ownerAddress}?chainId=8453&limit=200`;
+    const wieldResponse = await fetch(wieldUrl, {
       headers: { "API-KEY": WIELD_API_KEY, Accept: "application/json" },
       cache: "no-store",
     });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("❌ Wield API error:", response.status, errorText);
+    if (!wieldResponse.ok) {
+      const errorText = await wieldResponse.text();
+      console.error("❌ Wield API error:", wieldResponse.status, errorText);
       return NextResponse.json(
-        { error: `API error: ${response.status}` },
-        { status: response.status },
+        { error: `API error: ${wieldResponse.status}` },
+        { status: wieldResponse.status },
       );
     }
 
-    const data = await response.json();
+    const data = await wieldResponse.json();
     const allItems = data?.boxes || data?.data || [];
 
-    if (!Array.isArray(allItems)) {
+    if (!Array.isArray(allItems) || allItems.length === 0) {
       return NextResponse.json({ packs: [] });
     }
 
-    // Filter to unopened: rarity === 0
-    const items = allItems.filter((item: any) => (item.rarity ?? -1) === 0);
-    console.log(`📦 ${items.length} unopened of ${allItems.length} total`);
+    console.log(`📦 Wield returned ${allItems.length} tokens`);
 
-    // Get metadata for each unique contract (ONE RPC call per contract, sequential)
+    // Step 2: Verify on-chain with multicall (single RPC request)
+    // The Wield API can be stale — tokens may be burned, transferred, or already opened.
+    // On-chain reads give us the true state.
+    const client = createPublicClient({
+      chain: base,
+      transport: http(BASE_RPC),
+    });
+
+    // Build multicall: ownerOf + getTokenRarity for each token
+    const calls = allItems.flatMap((item: any) => [
+      {
+        address: item.contractAddress as `0x${string}`,
+        abi: PACK_ABI,
+        functionName: "ownerOf" as const,
+        args: [BigInt(item.tokenId)],
+      },
+      {
+        address: item.contractAddress as `0x${string}`,
+        abi: PACK_ABI,
+        functionName: "getTokenRarity" as const,
+        args: [BigInt(item.tokenId)],
+      },
+    ]);
+
+    console.log(`🔗 Multicall: ${calls.length} calls in 1 RPC request...`);
+    const results = await client.multicall({
+      contracts: calls,
+      allowFailure: true,
+    });
+
+    // Filter to truly unopened and owned tokens
+    const unopenedItems: typeof allItems = [];
+    for (let i = 0; i < allItems.length; i++) {
+      const ownerResult = results[i * 2];
+      const rarityResult = results[i * 2 + 1];
+
+      const isOwned =
+        ownerResult.status === "success" &&
+        (ownerResult.result as string).toLowerCase() ===
+          ownerAddress.toLowerCase();
+
+      // getTokenRarity returns 0 for unopened packs, >0 for opened.
+      // For freshly minted tokens, getTokenRarity may REVERT (status=failure)
+      // because VRF hasn't been called yet — these are also unopened.
+      const rarity =
+        rarityResult.status === "success"
+          ? Number((rarityResult.result as [number, bigint])[0])
+          : 0; // Revert = fresh mint = unopened
+
+      if (isOwned && rarity === 0) {
+        unopenedItems.push(allItems[i]);
+      }
+    }
+
+    console.log(
+      `📦 ${unopenedItems.length} truly unopened of ${allItems.length} Wield tokens`,
+    );
+
+    if (unopenedItems.length === 0) {
+      return NextResponse.json({ packs: [] });
+    }
+
+    // Step 3: Get collection metadata for display
     const uniqueContracts = [
-      ...new Set(items.map((item: any) => item.contractAddress)),
+      ...new Set(unopenedItems.map((item: any) => item.contractAddress)),
     ] as string[];
-    for (const contract of uniqueContracts) {
-      const sample = items.find(
-        (item: any) => item.contractAddress === contract,
+
+    for (const contractAddress of uniqueContracts) {
+      if (collectionCache.has(contractAddress)) continue;
+
+      const sample = unopenedItems.find(
+        (item: any) => item.contractAddress === contractAddress,
       );
-      if (sample) {
-        await getCollectionMetadata(contract, String(sample.tokenId));
+      if (!sample) continue;
+
+      try {
+        // Single tokenURI call per contract for metadata
+        const tokenUri = (await client.readContract({
+          address: contractAddress as `0x${string}`,
+          abi: PACK_ABI,
+          functionName: "tokenURI",
+          args: [BigInt(sample.tokenId)],
+        })) as string;
+
+        const httpUri = ipfsToHttp(tokenUri);
+        const metaResp = await fetch(httpUri, { cache: "no-store" });
+        if (metaResp.ok) {
+          const metadata = await metaResp.json();
+          const rawImage = metadata.image || metadata.imageUrl || "";
+          const image = rawImage ? ipfsToHttp(rawImage) : "/vibe.png";
+          const name =
+            metadata.name?.replace(/#\d+$/, "").trim() || "Unknown Pack";
+          collectionCache.set(contractAddress, { name, image });
+          console.log(
+            `✅ ${contractAddress.slice(0, 10)}...: ${name} | ${image.slice(0, 60)}`,
+          );
+        }
+      } catch (e: any) {
+        console.error(
+          `⚠️ Metadata failed for ${contractAddress.slice(0, 10)}...:`,
+          e.message?.slice(0, 100),
+        );
       }
     }
 
     // Build response
-    const packs = items.map((item: any) => {
+    const packs = unopenedItems.map((item: any) => {
       const meta = collectionCache.get(item.contractAddress) || {
         name: "Unknown Pack",
         image: "/vibe.png",
@@ -159,7 +212,7 @@ export async function GET(request: NextRequest) {
       };
     });
 
-    console.log(`✅ ${packs.length} packs ready`);
+    console.log(`✅ ${packs.length} packs ready (on-chain verified)`);
     return NextResponse.json({ packs });
   } catch (error: any) {
     console.error("Failed to fetch packs:", error);

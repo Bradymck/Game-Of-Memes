@@ -6,6 +6,7 @@ import {
   useState,
   useCallback,
   useEffect,
+  useRef,
   type ReactNode,
 } from "react";
 import { useVibeMarketCards } from "@/hooks/useVibeMarketCards";
@@ -122,22 +123,22 @@ export function GameProvider({ children }: { children: ReactNode }) {
     matchStartTime: Date.now(),
   });
 
-  // When user cards load, reset game with their cards for BOTH players
-  useEffect(() => {
-    if (userCards.length > 0) {
-      const shuffled1 = [...userCards].sort(() => Math.random() - 0.5);
-      const shuffled2 = [...userCards].sort(() => Math.random() - 0.5);
+  // Helper to initialize game state from a card set
+  const initGameFromCards = useCallback(
+    (gameCards: MemeCardData[], preserveDifficulty?: GameState) => {
+      const shuffled1 = [...gameCards].sort(() => Math.random() - 0.5);
+      const shuffled2 = [...gameCards].sort(() => Math.random() - 0.5);
 
       setState((prev) => ({
-        playerHand: shuffled1.slice(0, 4), // Draw initial 4 cards
-        playerDeck: shuffled1.slice(4), // Rest goes in deck
+        playerHand: shuffled1.slice(0, 4),
+        playerDeck: shuffled1.slice(4),
         playerField: [],
         playerGraveyard: [],
-        opponentHand: shuffled2.slice(0, 3), // AI gets 3 cards in hand
+        opponentHand: shuffled2.slice(0, 3),
         opponentField: shuffled2
           .slice(3, 4)
-          .map((c) => ({ ...c, canAttack: false })), // 1 card on board
-        opponentDeck: shuffled2.slice(4), // Rest in opponent deck
+          .map((c) => ({ ...c, canAttack: false })),
+        opponentDeck: shuffled2.slice(4),
         opponentGraveyard: [],
         playerMana: 1,
         maxPlayerMana: 1,
@@ -155,11 +156,42 @@ export function GameProvider({ children }: { children: ReactNode }) {
         damageDealt: 0,
         lastDamage: null,
         dyingMinions: [],
-        difficulty: prev.difficulty, // Preserve difficulty setting
+        difficulty: prev.difficulty,
         matchStartTime: Date.now(),
       }));
+    },
+    [],
+  );
+
+  // Track whether we loaded from a draft session — if so, don't let the
+  // API card fetch reset the game mid-play
+  const loadedFromDraftRef = useRef(false);
+
+  // On mount: check for freshly drafted cards from pack opening ceremony
+  useEffect(() => {
+    try {
+      const stored = sessionStorage.getItem("draftedCards");
+      if (stored) {
+        const draftedCards: MemeCardData[] = JSON.parse(stored);
+        sessionStorage.removeItem("draftedCards");
+        if (draftedCards.length > 0) {
+          console.log("🎴 Using freshly drafted cards:", draftedCards.length);
+          loadedFromDraftRef.current = true;
+          initGameFromCards(draftedCards);
+        }
+      }
+    } catch {
+      // No drafted cards, fall through to API cards
     }
-  }, [userCards.length]); // Only when length changes (cards loaded)
+  }, [initGameFromCards]);
+
+  // When user cards load from API, initialize game — but NOT if we
+  // already loaded from a draft (that would reset the game mid-play)
+  useEffect(() => {
+    if (userCards.length > 0 && !loadedFromDraftRef.current) {
+      initGameFromCards(userCards);
+    }
+  }, [userCards.length, initGameFromCards]);
 
   const playCard = useCallback(
     (cardId: string) => {
@@ -583,41 +615,9 @@ export function GameProvider({ children }: { children: ReactNode }) {
 
   const resetGame = useCallback(() => {
     if (userCards.length > 0) {
-      const shuffled1 = [...userCards].sort(() => Math.random() - 0.5);
-      const shuffled2 = [...userCards].sort(() => Math.random() - 0.5);
-
-      setState((prev) => ({
-        playerHand: shuffled1.slice(0, 4),
-        playerDeck: shuffled1.slice(4),
-        playerField: [],
-        playerGraveyard: [],
-        opponentHand: shuffled2.slice(0, 3),
-        opponentField: shuffled2
-          .slice(3, 4)
-          .map((c) => ({ ...c, canAttack: false })),
-        opponentDeck: shuffled2.slice(4),
-        opponentGraveyard: [],
-        playerMana: 1,
-        maxPlayerMana: 1,
-        opponentMana: 1,
-        maxOpponentMana: 1,
-        playerHealth: 30,
-        opponentHealth: 30,
-        selectedCard: null,
-        selectedAttacker: null,
-        isPlayerTurn: true,
-        turnNumber: 1,
-        gameOver: false,
-        playerWon: null,
-        cardsPlayed: 0,
-        damageDealt: 0,
-        lastDamage: null,
-        dyingMinions: [],
-        difficulty: prev.difficulty, // Preserve difficulty setting
-        matchStartTime: Date.now(),
-      }));
+      initGameFromCards(userCards);
     }
-  }, [userCards]);
+  }, [userCards, initGameFromCards]);
 
   const setDifficulty = useCallback((difficulty: Difficulty) => {
     setState((prev) => ({ ...prev, difficulty }));

@@ -9,15 +9,13 @@ interface PackSummaryProps {
   packName: string;
   cards: PackCard[];
   onPlayGame: () => void;
-  onOpenAnother: () => void;
-  onShare?: () => void; // Make optional, we'll handle internally
+  onShare?: () => void;
 }
 
 export function PackSummary({
   packName,
   cards,
   onPlayGame,
-  onOpenAnother,
   onShare,
 }: PackSummaryProps) {
   // Calculate pack stats
@@ -126,34 +124,23 @@ export function PackSummary({
           return (
             <div
               key={card.id}
-              className="relative w-24 h-32 md:w-32 md:h-44 rounded-xl overflow-hidden"
+              className="relative w-28 h-36 md:w-36 md:h-48 rounded-xl overflow-hidden"
               style={{
-                border: `2px solid ${config.color}`,
-                boxShadow: `0 0 20px ${config.glowColor}`,
+                border: `3px solid ${config.color}`,
+                boxShadow: `0 0 24px ${config.glowColor}, inset 0 0 12px ${config.glowColor}`,
               }}
             >
               {card.image ? (
                 <img
                   src={card.image}
                   alt={card.name}
-                  className="w-full h-3/4 object-cover"
+                  className="w-full h-full object-cover"
                 />
               ) : (
-                <div className="w-full h-3/4 bg-gradient-to-br from-slate-800 to-slate-900 flex items-center justify-center">
+                <div className="w-full h-full bg-gradient-to-br from-slate-800 to-slate-900 flex items-center justify-center">
                   <span className="text-2xl">🎴</span>
                 </div>
               )}
-              <div className="h-1/4 bg-slate-950 p-1 flex flex-col items-center justify-center">
-                {card.ticker ? (
-                  <p className="text-xs font-bold text-white">{card.ticker}</p>
-                ) : null}
-                <div
-                  className="text-xs font-bold uppercase"
-                  style={{ color: config.color }}
-                >
-                  {card.rarity}
-                </div>
-              </div>
             </div>
           );
         })}
@@ -248,20 +235,13 @@ export function PackSummary({
         </Button>
       </div>
 
-      {/* Action buttons */}
-      <div className="flex flex-col sm:flex-row gap-3 w-full max-w-md">
+      {/* Action button */}
+      <div className="w-full max-w-md">
         <Button
           onClick={onPlayGame}
-          className="flex-1 py-4 text-lg font-bold bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500"
+          className="w-full py-4 text-lg font-bold bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500"
         >
-          ⚔️ Play Game
-        </Button>
-        <Button
-          onClick={onOpenAnother}
-          variant="outline"
-          className="flex-1 py-4 border-amber-600 text-amber-400 hover:bg-amber-600/20"
-        >
-          🎴 Open Another
+          ⚔️ Play with These Cards
         </Button>
       </div>
     </div>
