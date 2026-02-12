@@ -1,19 +1,22 @@
-"use client"
+"use client";
 
-import { useState, useEffect, useRef } from "react"
-import { cn } from "@/lib/utils"
-import { recordWin, recordLoss } from "@/lib/soulContract"
-import { postGameResult } from "@/lib/xmtp"
-import { useSouls } from "@/hooks/useSouls"
-import { usePrivy } from "@privy-io/react-auth"
+import { useState, useEffect, useRef } from "react";
+import { cn } from "@/lib/utils";
+import { recordWin, recordLoss } from "@/lib/soulContract";
+import { postGameResult } from "@/lib/xmtp";
+import { useSouls } from "@/hooks/useSouls";
+import { usePrivy } from "@privy-io/react-auth";
 
 interface GameOverScreenProps {
-  playerWon: boolean
-  playerHealth: number
-  opponentHealth: number
-  cardsPlayed: number
-  damageDealt: number
-  onPlayAgain: () => void
+  playerWon: boolean;
+  playerHealth: number;
+  opponentHealth: number;
+  cardsPlayed: number;
+  damageDealt: number;
+  turnCount: number;
+  difficulty: string;
+  matchStartTime: number;
+  onPlayAgain: () => void;
 }
 
 export function GameOverScreen({
@@ -22,9 +25,14 @@ export function GameOverScreen({
   opponentHealth,
   cardsPlayed,
   damageDealt,
+  turnCount,
+  difficulty,
+  matchStartTime,
   onPlayAgain,
 }: GameOverScreenProps) {
-  const [recordingResult, setRecordingResult] = useState<'idle' | 'recording' | 'success' | 'error'>('idle');
+  const [recordingResult, setRecordingResult] = useState<
+    "idle" | "recording" | "success" | "error"
+  >("idle");
   const { refreshStats } = useSouls();
   const { user } = usePrivy();
   const hasRecordedRef = useRef(false); // Prevent double-recording (React Strict Mode protection)
@@ -33,10 +41,10 @@ export function GameOverScreen({
   useEffect(() => {
     async function recordMatchResult() {
       // Double guard against React Strict Mode + state changes
-      if (hasRecordedRef.current || recordingResult !== 'idle') return;
+      if (hasRecordedRef.current || recordingResult !== "idle") return;
 
       hasRecordedRef.current = true;
-      setRecordingResult('recording');
+      setRecordingResult("recording");
 
       try {
         let txHash: string;
@@ -49,7 +57,7 @@ export function GameOverScreen({
           txHash = await recordLoss();
         }
 
-        setRecordingResult('success');
+        setRecordingResult("success");
 
         // Refresh soul balance
         await refreshStats();
@@ -66,9 +74,41 @@ export function GameOverScreen({
             playerAddress: user.wallet.address,
           });
         }
+
+        // Record match details to Supabase (optional, don't fail if it errors)
+        if (user?.wallet?.address) {
+          try {
+            const durationSeconds = Math.floor(
+              (Date.now() - matchStartTime) / 1000,
+            );
+
+            await fetch("/api/matches", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                playerAddress: user.wallet.address,
+                playerWon,
+                playerHealth,
+                opponentHealth,
+                cardsPlayed,
+                damageDealt,
+                turnCount,
+                difficulty,
+                txHash,
+                durationSeconds,
+              }),
+            });
+          } catch (supabaseError) {
+            // Gracefully fail - Supabase recording is optional
+            console.warn(
+              "Failed to record match to Supabase (non-critical):",
+              supabaseError,
+            );
+          }
+        }
       } catch (error) {
-        console.error('Failed to record match result:', error);
-        setRecordingResult('error');
+        console.error("Failed to record match result:", error);
+        setRecordingResult("error");
         hasRecordedRef.current = false; // Allow retry on error
       }
     }
@@ -86,14 +126,16 @@ export function GameOverScreen({
             "relative rounded-t-2xl p-8 text-center border-4",
             playerWon
               ? "bg-gradient-to-b from-amber-500 to-amber-700 border-amber-400"
-              : "bg-gradient-to-b from-red-900 to-red-950 border-red-700"
+              : "bg-gradient-to-b from-red-900 to-red-950 border-red-700",
           )}
         >
           <h1 className="text-6xl font-bold text-white drop-shadow-lg mb-2">
             {playerWon ? "VICTORY!" : "DEFEAT"}
           </h1>
           <p className="text-xl text-white/90">
-            {playerWon ? "You crushed your opponent!" : "Better luck next time..."}
+            {playerWon
+              ? "You crushed your opponent!"
+              : "Better luck next time..."}
           </p>
         </div>
 
@@ -103,11 +145,15 @@ export function GameOverScreen({
             {/* Final Health */}
             <div className="flex justify-between items-center text-white">
               <span className="text-lg">Your Health:</span>
-              <span className="text-2xl font-bold text-green-400">{playerHealth}</span>
+              <span className="text-2xl font-bold text-green-400">
+                {playerHealth}
+              </span>
             </div>
             <div className="flex justify-between items-center text-white">
               <span className="text-lg">Opponent Health:</span>
-              <span className="text-2xl font-bold text-red-400">{opponentHealth}</span>
+              <span className="text-2xl font-bold text-red-400">
+                {opponentHealth}
+              </span>
             </div>
 
             <div className="border-t border-slate-700 my-4" />
@@ -129,15 +175,17 @@ export function GameOverScreen({
                 <div className="bg-purple-900/30 border border-purple-500/50 rounded-lg p-4 text-center">
                   <div className="text-5xl mb-2">👻</div>
                   <p className="text-purple-200 text-sm mb-2">
-                    {recordingResult === 'recording' && 'Recording result on-chain...'}
-                    {recordingResult === 'success' && 'You earned +1 Soul!'}
-                    {recordingResult === 'error' && 'Failed to record (try again)'}
-                    {recordingResult === 'idle' && 'Preparing to award soul...'}
+                    {recordingResult === "recording" &&
+                      "Recording result on-chain..."}
+                    {recordingResult === "success" && "You earned +1 Soul!"}
+                    {recordingResult === "error" &&
+                      "Failed to record (try again)"}
+                    {recordingResult === "idle" && "Preparing to award soul..."}
                   </p>
                   <p className="text-purple-300/70 text-xs">
                     More lives than a cat, eh? 🐱
                   </p>
-                  {recordingResult === 'success' && (
+                  {recordingResult === "success" && (
                     <p className="text-purple-400/80 text-xs mt-2 italic">
                       Future voting power unlocked
                     </p>
@@ -154,7 +202,7 @@ export function GameOverScreen({
                 "shadow-lg hover:shadow-xl hover:scale-105",
                 playerWon
                   ? "bg-gradient-to-b from-amber-500 to-amber-700 hover:from-amber-400 hover:to-amber-600 text-white"
-                  : "bg-gradient-to-b from-blue-500 to-blue-700 hover:from-blue-400 hover:to-blue-600 text-white"
+                  : "bg-gradient-to-b from-blue-500 to-blue-700 hover:from-blue-400 hover:to-blue-600 text-white",
               )}
             >
               Play Again
@@ -163,5 +211,5 @@ export function GameOverScreen({
         </div>
       </div>
     </div>
-  )
+  );
 }

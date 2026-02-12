@@ -46,6 +46,7 @@ export function GameBoard() {
     selectedCard,
     selectedAttacker,
     isPlayerTurn,
+    turnNumber,
     gameOver,
     playerWon,
     cardsPlayed,
@@ -53,6 +54,7 @@ export function GameBoard() {
     lastDamage,
     dyingMinions,
     difficulty,
+    matchStartTime,
     selectCard,
     selectAttacker,
     attackTarget,
@@ -441,6 +443,9 @@ export function GameBoard() {
           opponentHealth={opponentHealth}
           cardsPlayed={cardsPlayed}
           damageDealt={damageDealt}
+          turnCount={turnNumber}
+          difficulty={difficulty}
+          matchStartTime={matchStartTime}
           onPlayAgain={resetGame}
         />
       )}

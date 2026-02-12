@@ -61,6 +61,7 @@ interface GameState {
   } | null;
   dyingMinions: string[];
   difficulty: Difficulty;
+  matchStartTime: number;
 }
 
 interface GameContextType extends GameState {
@@ -118,6 +119,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
     lastDamage: null,
     dyingMinions: [],
     difficulty: "normal",
+    matchStartTime: Date.now(),
   });
 
   // When user cards load, reset game with their cards for BOTH players
@@ -154,6 +156,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
         lastDamage: null,
         dyingMinions: [],
         difficulty: prev.difficulty, // Preserve difficulty setting
+        matchStartTime: Date.now(),
       }));
     }
   }, [userCards.length]); // Only when length changes (cards loaded)
@@ -611,6 +614,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
         lastDamage: null,
         dyingMinions: [],
         difficulty: prev.difficulty, // Preserve difficulty setting
+        matchStartTime: Date.now(),
       }));
     }
   }, [userCards]);
