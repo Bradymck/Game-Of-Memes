@@ -137,8 +137,18 @@ export function PackSummary({
                   className="w-full h-full object-cover"
                 />
               ) : (
-                <div className="w-full h-full bg-gradient-to-br from-slate-800 to-slate-900 flex items-center justify-center">
-                  <span className="text-2xl">🎴</span>
+                <div
+                  className="w-full h-full flex flex-col items-center justify-center"
+                  style={{
+                    background: `linear-gradient(135deg, ${config.glowColor} 0%, rgba(15,23,42,0.95) 50%, ${config.glowColor} 100%)`,
+                  }}
+                >
+                  <span
+                    className="text-lg font-bold uppercase"
+                    style={{ color: config.color }}
+                  >
+                    {card.rarity}
+                  </span>
                 </div>
               )}
             </div>

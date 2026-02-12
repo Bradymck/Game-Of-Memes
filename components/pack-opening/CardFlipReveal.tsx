@@ -123,8 +123,21 @@ export function CardFlipReveal({
                 onError={() => setImgError(true)}
               />
             ) : (
-              <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-slate-800 to-slate-900">
-                <span className="text-4xl">🎴</span>
+              <div
+                className="w-full h-full flex flex-col items-center justify-center"
+                style={{
+                  background: `linear-gradient(135deg, ${config.glowColor} 0%, rgba(15,23,42,0.95) 50%, ${config.glowColor} 100%)`,
+                }}
+              >
+                <span
+                  className="text-3xl font-bold uppercase tracking-wider"
+                  style={{ color: config.color }}
+                >
+                  {card.rarity}
+                </span>
+                <span className="text-xs text-gray-400 mt-1">
+                  Image loading...
+                </span>
               </div>
             )}
 

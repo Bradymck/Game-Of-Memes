@@ -378,7 +378,7 @@ export function usePythVRF({
       console.log(
         `✅ ${revealedRarities.size} rarities confirmed. Waiting for card images to propagate...`,
       );
-      await new Promise((resolve) => setTimeout(resolve, 3000));
+      await new Promise((resolve) => setTimeout(resolve, 8000));
 
       // Helper to fetch metadata for all revealed tokens
       const fetchAllCardMetadata = async (): Promise<PackCard[]> => {
@@ -387,7 +387,7 @@ export function usePythVRF({
           tokenIds.map(async (tokenId) => {
             const tokenUri = await contract.tokenURI(tokenId);
             const httpUri = ipfsToHttp(tokenUri);
-            const metaResponse = await fetch(httpUri);
+            const metaResponse = await fetch(httpUri, { cache: "no-store" });
             const metadata = await metaResponse.json();
             const rarity = revealedRarities.get(tokenId) || 1;
 
@@ -421,7 +421,7 @@ export function usePythVRF({
       // server hasn't propagated unique card art yet (still showing pack cover)
       let revealedCards: PackCard[] = [];
       let metadataRetries = 0;
-      const maxMetadataRetries = 3;
+      const maxMetadataRetries = 5;
 
       while (metadataRetries <= maxMetadataRetries) {
         revealedCards = await fetchAllCardMetadata();
@@ -440,13 +440,20 @@ export function usePythVRF({
         metadataRetries++;
         if (metadataRetries <= maxMetadataRetries) {
           console.log(
-            `⏳ All images identical (pack cover still showing), retrying in 5s (${metadataRetries}/${maxMetadataRetries})`,
+            `⏳ All images identical (pack cover still showing), retrying in 8s (${metadataRetries}/${maxMetadataRetries})`,
           );
-          await new Promise((resolve) => setTimeout(resolve, 5000));
+          await new Promise((resolve) => setTimeout(resolve, 8000));
         } else {
           console.warn(
-            "⚠️ Metadata images not yet propagated after retries, using current images",
+            "⚠️ Metadata not propagated after retries — clearing pack cover images",
           );
+          // Clear the duplicate pack cover so cards show rarity placeholder
+          // instead of misleadingly showing the pack art as the card face
+          const packCoverUrl = revealedCards[0]?.image;
+          revealedCards = revealedCards.map((card) => ({
+            ...card,
+            image: card.image === packCoverUrl ? "" : card.image,
+          }));
         }
       }
 

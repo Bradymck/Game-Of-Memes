@@ -74,13 +74,54 @@ interface GameContextType extends GameState {
   endTurn: () => void;
   resetGame: () => void;
   setDifficulty: (difficulty: Difficulty) => void;
+  aiCollectionName: string;
+  playerPackImage: string;
+  aiPackImage: string;
 }
 
 const GameContext = createContext<GameContextType | null>(null);
 
 export function GameProvider({ children }: { children: ReactNode }) {
-  const { cards: userCards } = useVibeMarketCards();
+  const {
+    cards: userCards,
+    packImage: userPackImage,
+    contractAddresses: playerContracts,
+  } = useVibeMarketCards();
   const { user } = usePrivy();
+
+  // AI deck from top VibeMarket collections
+  const [aiCards, setAiCards] = useState<MemeCardData[]>([]);
+  const [aiCollectionName, setAiCollectionName] = useState<string>("");
+  const [aiPackImage, setAiPackImage] = useState<string>(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("gom:aiPackImage") || "";
+    }
+    return "";
+  });
+  const [playerPackImage, setPlayerPackImage] = useState<string>("");
+
+  const fetchAiDeck = useCallback(async (excludeContract?: string) => {
+    try {
+      const url = excludeContract
+        ? `/api/ai-deck?exclude=${excludeContract}`
+        : "/api/ai-deck";
+      const res = await fetch(url);
+      const data = await res.json();
+      if (data.cards?.length > 0) {
+        setAiCards(data.cards);
+        setAiCollectionName(data.collectionName || "");
+        if (data.packImage) {
+          setAiPackImage(data.packImage);
+          localStorage.setItem("gom:aiPackImage", data.packImage);
+        }
+        console.log(
+          `🤖 AI deck loaded: ${data.cards.length} cards from "${data.collectionName}"`,
+        );
+      }
+    } catch (e) {
+      console.error("Failed to fetch AI deck:", e);
+    }
+  }, []);
 
   // Ghost loading cards (ethereal placeholders while NFTs load)
   const ghostCards: MemeCardData[] = Array.from({ length: 4 }, (_, i) => ({
@@ -123,22 +164,40 @@ export function GameProvider({ children }: { children: ReactNode }) {
     matchStartTime: Date.now(),
   });
 
-  // Helper to initialize game state from a card set
+  // Helper to initialize game state from card sets
+  // If opponentCards provided, AI uses those; otherwise falls back to playerCards
   const initGameFromCards = useCallback(
-    (gameCards: MemeCardData[], preserveDifficulty?: GameState) => {
-      const shuffled1 = [...gameCards].sort(() => Math.random() - 0.5);
-      const shuffled2 = [...gameCards].sort(() => Math.random() - 0.5);
+    (playerCards: MemeCardData[], opponentCards?: MemeCardData[]) => {
+      // Pad to 25 cards minimum by duplicating with unique IDs
+      const padDeck = (cards: MemeCardData[]): MemeCardData[] => {
+        if (cards.length === 0) return cards;
+        const deck = [...cards];
+        let dupIdx = 0;
+        while (deck.length < 25) {
+          const source = cards[dupIdx % cards.length];
+          deck.push({ ...source, id: `${source.id}-dup-${dupIdx}` });
+          dupIdx++;
+        }
+        return deck;
+      };
+
+      const shuffledPlayer = padDeck(playerCards).sort(
+        () => Math.random() - 0.5,
+      );
+      const aiDeck =
+        opponentCards && opponentCards.length > 0 ? opponentCards : playerCards;
+      const shuffledAI = padDeck(aiDeck).sort(() => Math.random() - 0.5);
 
       setState((prev) => ({
-        playerHand: shuffled1.slice(0, 4),
-        playerDeck: shuffled1.slice(4),
+        playerHand: shuffledPlayer.slice(0, 4),
+        playerDeck: shuffledPlayer.slice(4),
         playerField: [],
         playerGraveyard: [],
-        opponentHand: shuffled2.slice(0, 3),
-        opponentField: shuffled2
+        opponentHand: shuffledAI.slice(0, 3),
+        opponentField: shuffledAI
           .slice(3, 4)
           .map((c) => ({ ...c, canAttack: false })),
-        opponentDeck: shuffled2.slice(4),
+        opponentDeck: shuffledAI.slice(4),
         opponentGraveyard: [],
         playerMana: 1,
         maxPlayerMana: 1,
@@ -167,7 +226,30 @@ export function GameProvider({ children }: { children: ReactNode }) {
   // API card fetch reset the game mid-play
   const loadedFromDraftRef = useRef(false);
 
-  // On mount: check for freshly drafted cards from pack opening ceremony
+  // Fetch AI deck once player contracts are known (so we can exclude them)
+  // Falls back to no exclusion if player has no contracts yet
+  const aiDeckFetchedRef = useRef(false);
+  useEffect(() => {
+    if (aiDeckFetchedRef.current) return;
+    if (playerContracts.length > 0) {
+      aiDeckFetchedRef.current = true;
+      fetchAiDeck(playerContracts[0]);
+    }
+  }, [playerContracts, fetchAiDeck]);
+
+  // Fallback: if player contracts never load (no wallet), fetch AI deck anyway
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (!aiDeckFetchedRef.current) {
+        aiDeckFetchedRef.current = true;
+        fetchAiDeck();
+      }
+    }, 5000);
+    return () => clearTimeout(timer);
+  }, [fetchAiDeck]);
+
+  // Store drafted cards if present, but don't init game yet
+  const draftedCardsRef = useRef<MemeCardData[] | null>(null);
   useEffect(() => {
     try {
       const stored = sessionStorage.getItem("draftedCards");
@@ -175,23 +257,42 @@ export function GameProvider({ children }: { children: ReactNode }) {
         const draftedCards: MemeCardData[] = JSON.parse(stored);
         sessionStorage.removeItem("draftedCards");
         if (draftedCards.length > 0) {
-          console.log("🎴 Using freshly drafted cards:", draftedCards.length);
+          console.log("🎴 Draft cards found:", draftedCards.length);
           loadedFromDraftRef.current = true;
-          initGameFromCards(draftedCards);
+          draftedCardsRef.current = draftedCards;
         }
       }
     } catch {
-      // No drafted cards, fall through to API cards
+      // No drafted cards
     }
-  }, [initGameFromCards]);
+  }, []);
 
-  // When user cards load from API, initialize game — but NOT if we
-  // already loaded from a draft (that would reset the game mid-play)
+  // Initialize game only when BOTH player/draft cards AND AI cards are ready.
+  // This prevents the opponent from using the player's cards as a fallback.
+  const gameInitializedRef = useRef(false);
   useEffect(() => {
-    if (userCards.length > 0 && !loadedFromDraftRef.current) {
-      initGameFromCards(userCards);
-    }
-  }, [userCards.length, initGameFromCards]);
+    if (gameInitializedRef.current) return;
+    if (aiCards.length === 0) return; // Wait for AI deck
+
+    const playerDeck = loadedFromDraftRef.current
+      ? draftedCardsRef.current
+      : userCards.length > 0
+        ? userCards
+        : null;
+
+    if (!playerDeck || playerDeck.length === 0) return; // Wait for player cards
+
+    gameInitializedRef.current = true;
+    console.log(
+      `🎮 Initializing game: ${playerDeck.length} player cards, ${aiCards.length} AI cards`,
+    );
+    initGameFromCards(playerDeck, aiCards);
+  }, [userCards, aiCards, initGameFromCards]);
+
+  // Set player pack image when it loads from the cards API
+  useEffect(() => {
+    if (userPackImage) setPlayerPackImage(userPackImage);
+  }, [userPackImage]);
 
   const playCard = useCallback(
     (cardId: string) => {
@@ -613,11 +714,33 @@ export function GameProvider({ children }: { children: ReactNode }) {
     }, 2000);
   }, [user?.wallet?.address]);
 
-  const resetGame = useCallback(() => {
-    if (userCards.length > 0) {
-      initGameFromCards(userCards);
+  const resetGame = useCallback(async () => {
+    // Fetch a fresh AI deck (potentially different collection), excluding player's
+    try {
+      const excludeParam = playerContracts[0]
+        ? `?exclude=${playerContracts[0]}`
+        : "";
+      const res = await fetch(`/api/ai-deck${excludeParam}`);
+      const data = await res.json();
+      if (data.cards?.length > 0) {
+        setAiCards(data.cards);
+        setAiCollectionName(data.collectionName || "");
+        if (data.packImage) {
+          setAiPackImage(data.packImage);
+          localStorage.setItem("gom:aiPackImage", data.packImage);
+        }
+        if (userCards.length > 0) {
+          initGameFromCards(userCards, data.cards);
+          return;
+        }
+      }
+    } catch {
+      // Fall through to existing AI cards
     }
-  }, [userCards, initGameFromCards]);
+    if (userCards.length > 0) {
+      initGameFromCards(userCards, aiCards.length > 0 ? aiCards : undefined);
+    }
+  }, [userCards, aiCards, playerContracts, initGameFromCards]);
 
   const setDifficulty = useCallback((difficulty: Difficulty) => {
     setState((prev) => ({ ...prev, difficulty }));
@@ -635,6 +758,9 @@ export function GameProvider({ children }: { children: ReactNode }) {
         endTurn,
         resetGame,
         setDifficulty,
+        aiCollectionName,
+        playerPackImage,
+        aiPackImage,
       }}
     >
       {children}

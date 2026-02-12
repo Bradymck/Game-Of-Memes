@@ -63,6 +63,8 @@ export function GameBoard() {
     endTurn,
     resetGame,
     setDifficulty,
+    playerPackImage,
+    aiPackImage,
   } = useGame();
 
   // Debug logging for lastDamage
@@ -95,7 +97,7 @@ export function GameBoard() {
                 {deckPositions.map((pos, i) => (
                   <div
                     key={i}
-                    className="absolute w-20 h-28 rounded-lg overflow-hidden border border-red-600/60 shadow-lg"
+                    className="absolute w-20 h-28 rounded-lg overflow-hidden shadow-lg"
                     style={{
                       bottom: i * 1.5 + pos.y,
                       left: i * 0.5 + pos.x,
@@ -104,9 +106,9 @@ export function GameBoard() {
                     }}
                   >
                     <img
-                      src="/vibe.png"
+                      src={aiPackImage || "/vibe.png"}
                       alt="card back"
-                      className="w-full h-full object-cover"
+                      className="w-full h-full object-cover scale-110"
                     />
                   </div>
                 ))}
@@ -183,7 +185,7 @@ export function GameBoard() {
                   return (
                     <div
                       key={i}
-                      className="absolute w-20 h-28 rounded-lg border-2 border-red-600/60 overflow-hidden shadow-lg"
+                      className="absolute w-20 h-28 rounded-lg overflow-hidden shadow-lg"
                       style={{
                         transform: `translateX(${xOffset}px) rotate(${rotation}deg)`,
                         transformOrigin: "bottom center",
@@ -192,9 +194,9 @@ export function GameBoard() {
                       }}
                     >
                       <img
-                        src="/vibe.png"
+                        src={aiPackImage || "/vibe.png"}
                         alt="opponent card"
-                        className="w-full h-full object-cover"
+                        className="w-full h-full object-cover scale-125"
                       />
                     </div>
                   );
@@ -300,7 +302,7 @@ export function GameBoard() {
                 {deckPositions.map((pos, i) => (
                   <div
                     key={i}
-                    className="absolute w-20 h-28 rounded-lg overflow-hidden border border-red-600/60 shadow-lg"
+                    className="absolute w-20 h-28 rounded-lg overflow-hidden shadow-lg"
                     style={{
                       bottom: i * 1.5 + pos.y,
                       left: i * 0.5 + pos.x,
@@ -309,9 +311,9 @@ export function GameBoard() {
                     }}
                   >
                     <img
-                      src="/vibe.png"
+                      src={playerPackImage || "/vibe.png"}
                       alt="card back"
-                      className="w-full h-full object-cover"
+                      className="w-full h-full object-cover scale-125"
                     />
                   </div>
                 ))}

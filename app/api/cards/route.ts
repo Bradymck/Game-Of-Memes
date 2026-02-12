@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createPublicClient, http } from "viem";
 import { base } from "viem/chains";
-import { getPackTokenAddress } from "@/lib/vibemarket";
+import { getPackTokenAddress, getPackInfo } from "@/lib/vibemarket";
 import { fetchTokenMarketData } from "@/lib/tokenPriceAPI";
 import { calculateCardStats } from "@/lib/marketStats";
 
@@ -94,8 +94,16 @@ export async function GET(request: NextRequest) {
     const data = await response.json();
     const items = data?.boxes || data?.data || [];
 
+    // Will fetch pack cover image via getPackInfo after we know the contract
+    let wieldPackImage = "";
+
     if (!Array.isArray(items) || items.length === 0) {
-      return NextResponse.json({ cards: [], revealed: 0, total: 0 });
+      return NextResponse.json({
+        cards: [],
+        revealed: 0,
+        total: 0,
+        packImage: "",
+      });
     }
 
     // Apply contract/token filters if specified
@@ -314,10 +322,78 @@ export async function GET(request: NextRequest) {
       }),
     );
 
+    // Fetch pack cover image: on-chain first (find unopened token), Wield fallback
+    if (enrichedCards.length > 0) {
+      const firstContract = enrichedCards[0].contractAddress as `0x${string}`;
+
+      // Try on-chain: sample tokenIds 1-10, find one with rarity=0 (unopened = pack cover)
+      try {
+        const sampleIds = Array.from({ length: 10 }, (_, i) => i + 1);
+        const sampleCalls = sampleIds.map((id) => ({
+          address: firstContract,
+          abi: PACK_ABI,
+          functionName: "getTokenRarity" as const,
+          args: [BigInt(id)],
+        }));
+        const sampleResults = await client.multicall({
+          contracts: sampleCalls,
+          allowFailure: true,
+        });
+
+        let unopenedTokenId: number | null = null;
+        for (let i = 0; i < sampleIds.length; i++) {
+          const r = sampleResults[i];
+          if (r.status === "success") {
+            const rarity = Number((r.result as [number, bigint])[0]);
+            if (rarity === 0) {
+              unopenedTokenId = sampleIds[i];
+              break;
+            }
+          }
+        }
+
+        if (unopenedTokenId !== null) {
+          const packUri = await client.readContract({
+            address: firstContract,
+            abi: PACK_ABI,
+            functionName: "tokenURI",
+            args: [BigInt(unopenedTokenId)],
+          });
+          const httpUri = ipfsToHttp(packUri as string);
+          const metaResp = await fetch(httpUri, { cache: "no-store" });
+          if (metaResp.ok) {
+            const meta = await metaResp.json();
+            wieldPackImage = ipfsToHttp(meta.image || meta.imageUrl || "");
+            console.log(
+              `🎨 Pack cover from on-chain token #${unopenedTokenId}`,
+            );
+          }
+        }
+      } catch {
+        // On-chain pack cover detection failed, will try Wield
+      }
+
+      // Fallback: Wield API getPackInfo
+      if (!wieldPackImage) {
+        try {
+          const packInfo = await getPackInfo(firstContract);
+          const ci = packInfo?.contractInfo;
+          wieldPackImage =
+            ci?.packImage || ci?.imageUrl || ci?.featuredImageUrl || "";
+          if (wieldPackImage) {
+            console.log(`🎨 Pack cover from Wield API fallback`);
+          }
+        } catch {
+          // Wield API may be rate-limited
+        }
+      }
+    }
+
     return NextResponse.json({
       cards: enrichedCards,
       revealed: enrichedCards.length,
       total: matched.length,
+      packImage: wieldPackImage,
     });
   } catch (error: any) {
     console.error("Failed to fetch cards:", error);

@@ -7,6 +7,13 @@ import type { MemeCardData } from "@/lib/game-context";
 export function useVibeMarketCards() {
   const { authenticated, user } = usePrivy();
   const [cards, setCards] = useState<MemeCardData[]>([]);
+  const [contractAddresses, setContractAddresses] = useState<string[]>([]);
+  const [packImage, setPackImage] = useState<string>(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("gom:playerPackImage") || "";
+    }
+    return "";
+  });
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -59,6 +66,21 @@ export function useVibeMarketCards() {
         });
 
         setCards(gameCards);
+
+        // Extract unique contract addresses from API response
+        const contracts = [
+          ...new Set(
+            apiCards
+              .map((c: any) => c.contractAddress)
+              .filter(Boolean) as string[],
+          ),
+        ];
+        setContractAddresses(contracts);
+
+        if (data.packImage) {
+          setPackImage(data.packImage);
+          localStorage.setItem("gom:playerPackImage", data.packImage);
+        }
       })
       .catch((error) => {
         console.error("Failed to load cards:", error);
@@ -67,5 +89,5 @@ export function useVibeMarketCards() {
       .finally(() => setLoading(false));
   }, [authenticated, user?.wallet?.address]);
 
-  return { cards, loading };
+  return { cards, loading, packImage, contractAddresses };
 }
