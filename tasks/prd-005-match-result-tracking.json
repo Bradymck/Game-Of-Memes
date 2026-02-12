@@ -1,7 +1,8 @@
 {
   "id": "PRD-005",
   "title": "Match Result Tracking via Supabase",
-  "status": "pending",
+  "status": "completed",
+  "completedAt": "2026-02-12T05:15:00Z",
   "agent": "pixel",
   "priority": "P1",
   "description": "Add detailed match result tracking to Supabase alongside the existing on-chain SoulTokenV2 recording. Currently the game-over-screen.tsx already records wins/losses on-chain (SoulTokenV2 at 0xE391939D6061697f72D197792d2360c81204B7fe), but only stores aggregate stats. This PRD adds per-match detail storage (stats, duration, difficulty) to Supabase for leaderboards and card balance analysis. The Supabase instance is shared with AquaPrime and already configured in .env. NOTE: The Supabase table must be created manually — the agent should create the SQL migration file but cannot run it.",
