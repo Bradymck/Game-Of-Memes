@@ -1,4 +1,4 @@
-import { Client } from '@xmtp/browser-sdk';
+import { Client } from "@xmtp/browser-sdk";
 
 let xmtpClient: Client | null = null;
 let gameConversation: any = null;
@@ -16,22 +16,13 @@ export async function initializeXMTP(): Promise<Client | null> {
 
 /**
  * Start a new game session (creates game ID and conversation)
+ * TODO: Re-enable XMTP when browser-sdk is fixed
  */
 export async function startGameSession(playerAddress: string): Promise<string> {
-  const client = await initializeXMTP();
   currentGameId = `game_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
-  // Create or get conversation (self-conversation for solo, or with opponent for PVP)
-  gameConversation = await client.conversations.newConversation(playerAddress);
-
-  // Post game start
-  await gameConversation.send(JSON.stringify({
-    type: 'game_start',
-    gameId: currentGameId,
-    timestamp: Date.now(),
-    player: playerAddress,
-  }));
-
+  // XMTP is temporarily disabled - returning gameId only
+  // Will restore conversation creation when SDK is working
   return currentGameId;
 }
 
@@ -39,11 +30,20 @@ export async function startGameSession(playerAddress: string): Promise<string> {
  * Log a game action (real-time audit trail)
  * TODO: Will use XMTP when SDK is fixed, currently localStorage
  */
-export function logGameAction(action: {
-  type: 'play_card' | 'attack_minion' | 'attack_hero' | 'end_turn' | 'card_draw' | 'minion_death';
-  actor: string;
-  data: any;
-}, playerAddress: string) {
+export function logGameAction(
+  action: {
+    type:
+      | "play_card"
+      | "attack_minion"
+      | "attack_hero"
+      | "end_turn"
+      | "card_draw"
+      | "minion_death";
+    actor: string;
+    data: any;
+  },
+  playerAddress: string,
+) {
   try {
     const message = {
       timestamp: Date.now(),
@@ -60,9 +60,9 @@ export function logGameAction(action: {
     const trimmed = history.slice(-100);
     localStorage.setItem(key, JSON.stringify(trimmed));
 
-    console.log('🎮 Action logged:', message);
+    console.log("🎮 Action logged:", message);
   } catch (error) {
-    console.error('Failed to log game action:', error);
+    console.error("Failed to log game action:", error);
   }
 }
 
@@ -81,9 +81,9 @@ export async function postGameResult(params: {
   try {
     // Message content for the game result
     const message = {
-      type: 'game_of_memes_result',
+      type: "game_of_memes_result",
       timestamp: Date.now(),
-      result: params.playerWon ? 'VICTORY' : 'DEFEAT',
+      result: params.playerWon ? "VICTORY" : "DEFEAT",
       stats: {
         playerHealth: params.playerHealth,
         opponentHealth: params.opponentHealth,
@@ -103,10 +103,10 @@ export async function postGameResult(params: {
     const trimmed = history.slice(-100);
     localStorage.setItem(key, JSON.stringify(trimmed));
 
-    console.log('✅ Game result saved:', message);
+    console.log("✅ Game result saved:", message);
     return message;
   } catch (error) {
-    console.error('Failed to save game result:', error);
+    console.error("Failed to save game result:", error);
     // Don't throw - logging is optional, shouldn't break game
   }
 }
@@ -122,7 +122,7 @@ export async function getGameHistory(playerAddress: string) {
     if (!stored) return [];
     return JSON.parse(stored);
   } catch (error) {
-    console.error('Failed to get game history:', error);
+    console.error("Failed to get game history:", error);
     return [];
   }
 }

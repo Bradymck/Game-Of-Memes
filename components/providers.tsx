@@ -16,12 +16,8 @@ export function Providers({ children }: { children: React.ReactNode }) {
       loginMethods: ["wallet" as const, "google" as const],
       appearance: {
         theme: "dark" as const,
-        accentColor: "#8B5CF6",
-        walletList: [
-          "metamask",
-          "coinbase_wallet",
-          "detected_wallets",
-        ] as const,
+        accentColor: "#8B5CF6" as `#${string}`,
+        walletList: ["metamask", "coinbase_wallet", "detected_wallets"] as any,
       },
       embeddedWallets: {
         createOnLogin: "off" as const,
@@ -31,14 +27,14 @@ export function Providers({ children }: { children: React.ReactNode }) {
           enabled: false,
         },
       },
-      defaultChain: base,
-      supportedChains: [base],
+      defaultChain: base as any,
+      supportedChains: [base] as any,
     }),
     [],
   );
 
   return (
-    <PrivyProvider appId={PRIVY_APP_ID} config={privyConfig}>
+    <PrivyProvider appId={PRIVY_APP_ID!} config={privyConfig}>
       {children}
     </PrivyProvider>
   );

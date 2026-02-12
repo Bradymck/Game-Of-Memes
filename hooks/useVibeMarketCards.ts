@@ -37,9 +37,14 @@ export function useVibeMarketCards() {
 
         const gameCards: MemeCardData[] = apiCards.map((card: any) => {
           const rarity = card.rarity || "common";
-          const stats =
-            rarityStats[rarity as keyof typeof rarityStats] ||
-            rarityStats.common;
+
+          // If API already returned stats, use them (market-derived)
+          // Otherwise fall back to rarity-based stats
+          const hasMarketStats = card.attack !== undefined;
+          const stats = hasMarketStats
+            ? { attack: card.attack, health: card.health, mana: card.mana }
+            : rarityStats[rarity as keyof typeof rarityStats] ||
+              rarityStats.common;
 
           return {
             id: card.id,
@@ -49,6 +54,7 @@ export function useVibeMarketCards() {
             rarity: rarity as "common" | "rare" | "epic" | "legendary",
             ...stats,
             canAttack: false,
+            marketData: card.marketData, // Pass through if present
           };
         });
 

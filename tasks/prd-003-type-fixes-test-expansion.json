@@ -1,0 +1,33 @@
+{
+  "id": "PRD-003",
+  "title": "Fix TypeScript Errors & Expand Test Coverage",
+  "status": "completed",
+  "completedAt": "2026-02-12T04:25:00Z",
+  "agent": "pixel",
+  "priority": "P1",
+  "description": "Fix all 9 TypeScript compilation errors to enable clean builds (npx tsc --noEmit = 0 errors). Then expand test coverage with component tests and a full game flow E2E test. This unblocks the autonomous build loop where Scribe can verify builds are clean.",
+  "acceptance_criteria": [
+    "npx tsc --noEmit exits with 0 errors",
+    "npm test passes with 65+ tests (existing tests don't break)",
+    "npm run test:e2e passes with 7+ tests (existing tests don't break)",
+    "npm run build succeeds with no errors"
+  ],
+  "known_type_errors": [
+    "app/draft/[packId]/DraftOpeningFlow.tsx - onBatchComplete prop type mismatch",
+    "components/meme-background.tsx - Three.js loader imports missing",
+    "components/meme-background.tsx - Three.js geometry prop on wrong element",
+    "components/providers.tsx - Privy config type errors (accentColor, defaultChain)",
+    "lib/openedCards.ts - BigInt literal requires ES2020 target",
+    "lib/xmtp.ts - XMTP client possibly null"
+  ],
+  "files_to_modify": [
+    "tsconfig.json",
+    "app/draft/[packId]/DraftOpeningFlow.tsx",
+    "components/meme-background.tsx",
+    "components/providers.tsx",
+    "lib/openedCards.ts",
+    "lib/xmtp.ts"
+  ],
+  "created": "2026-02-12",
+  "depends_on": "PRD-002"
+}

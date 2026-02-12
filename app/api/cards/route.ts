@@ -1,4 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getPackTokenAddress } from "@/lib/vibemarket";
+import { fetchTokenMarketData } from "@/lib/tokenPriceAPI";
+import { calculateCardStats } from "@/lib/marketStats";
 
 export const dynamic = "force-dynamic";
 
@@ -200,9 +203,72 @@ export async function GET(request: NextRequest) {
       }),
     );
 
+    // Enrich cards with market data
+    const packTokenCache = new Map<string, string | null>();
+
+    const enrichedCards = await Promise.all(
+      revealed.map(async (card: any) => {
+        // Get token address for this pack contract (cached)
+        let tokenAddress = packTokenCache.get(card.contractAddress);
+        if (tokenAddress === undefined) {
+          tokenAddress = await getPackTokenAddress(card.contractAddress);
+          packTokenCache.set(card.contractAddress, tokenAddress);
+        }
+
+        // If no token address, use rarity-based stats
+        if (!tokenAddress) {
+          const rarityStats = {
+            common: { attack: 2, health: 2, mana: 2 },
+            rare: { attack: 3, health: 3, mana: 3 },
+            epic: { attack: 4, health: 5, mana: 4 },
+            legendary: { attack: 6, health: 6, mana: 5 },
+          };
+          const stats =
+            rarityStats[card.rarity as keyof typeof rarityStats] ||
+            rarityStats.common;
+
+          return { ...card, ...stats };
+        }
+
+        // Fetch market data
+        const marketData = await fetchTokenMarketData(tokenAddress);
+
+        // If market data unavailable, fall back to rarity
+        if (!marketData) {
+          const rarityStats = {
+            common: { attack: 2, health: 2, mana: 2 },
+            rare: { attack: 3, health: 3, mana: 3 },
+            epic: { attack: 4, health: 5, mana: 4 },
+            legendary: { attack: 6, health: 6, mana: 5 },
+          };
+          const stats =
+            rarityStats[card.rarity as keyof typeof rarityStats] ||
+            rarityStats.common;
+
+          return { ...card, ...stats };
+        }
+
+        // Calculate market-derived stats
+        const marketStats = calculateCardStats(marketData);
+
+        return {
+          ...card,
+          attack: marketStats.attack,
+          health: marketStats.health,
+          mana: marketStats.mana,
+          rarity: marketStats.rarity,
+          marketData: {
+            price: marketData.price,
+            priceChange24h: marketData.priceChange24h,
+            marketCap: marketData.marketCap,
+          },
+        };
+      }),
+    );
+
     return NextResponse.json({
-      cards: revealed,
-      revealed: revealed.length,
+      cards: enrichedCards,
+      revealed: enrichedCards.length,
       total: tokenSet.size || matched.length,
     });
   } catch (error: any) {

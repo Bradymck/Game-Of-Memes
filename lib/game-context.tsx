@@ -24,6 +24,11 @@ export interface MemeCardData {
   ticker: string;
   ability?: string;
   canAttack?: boolean;
+  marketData?: {
+    price: number;
+    priceChange24h: number;
+    marketCap: number;
+  };
 }
 
 interface GameState {

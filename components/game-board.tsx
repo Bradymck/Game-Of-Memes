@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useGame } from "@/lib/game-context";
 import { usePrivy } from "@privy-io/react-auth";
 import { HeroPortrait } from "@/components/hero-portrait";
@@ -15,16 +15,19 @@ import { cn } from "@/lib/utils";
 export function GameBoard() {
   const { user } = usePrivy();
 
-  // Stable random positions for deck piles (don't regenerate on every render!)
-  const deckPositions = useMemo(
-    () =>
+  // Generate random deck positions only on client to avoid hydration mismatch
+  const [deckPositions, setDeckPositions] = useState(() =>
+    Array.from({ length: 12 }, () => ({ rotation: 0, x: 0, y: 0 })),
+  );
+  useEffect(() => {
+    setDeckPositions(
       Array.from({ length: 12 }, () => ({
         rotation: (Math.random() - 0.5) * 8,
         x: (Math.random() - 0.5) * 4,
         y: (Math.random() - 0.5) * 4,
       })),
-    [],
-  );
+    );
+  }, []);
   const {
     playerHand,
     playerField,
