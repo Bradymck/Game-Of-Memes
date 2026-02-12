@@ -49,6 +49,7 @@ export function GameBoard() {
     damageDealt,
     lastDamage,
     dyingMinions,
+    difficulty,
     selectCard,
     selectAttacker,
     attackTarget,
@@ -56,6 +57,7 @@ export function GameBoard() {
     playCard,
     endTurn,
     resetGame,
+    setDifficulty,
   } = useGame();
 
   // Debug logging for lastDamage
@@ -196,6 +198,51 @@ export function GameBoard() {
               {/* Center gem */}
               <div className="relative z-10 w-14 h-14 rounded-full bg-gradient-to-b from-amber-500 to-amber-800 border-3 border-amber-300 flex items-center justify-center shadow-xl">
                 <span className="text-white text-2xl drop-shadow-lg">⚔️</span>
+              </div>
+
+              {/* Difficulty Selector (Left Side) */}
+              <div className="absolute left-8 flex flex-col items-start gap-1">
+                <span className="text-amber-200/60 text-xs uppercase tracking-wide font-bold">
+                  AI Difficulty
+                </span>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setDifficulty("easy")}
+                    className={cn(
+                      "px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all",
+                      "border-2 shadow-lg",
+                      difficulty === "easy"
+                        ? "bg-gradient-to-b from-blue-500 to-blue-700 border-blue-400 text-white scale-105"
+                        : "bg-gradient-to-b from-stone-600 to-stone-800 border-stone-500 text-stone-300 hover:scale-105 active:scale-95",
+                    )}
+                  >
+                    Easy
+                  </button>
+                  <button
+                    onClick={() => setDifficulty("normal")}
+                    className={cn(
+                      "px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all",
+                      "border-2 shadow-lg",
+                      difficulty === "normal"
+                        ? "bg-gradient-to-b from-yellow-500 to-yellow-700 border-yellow-400 text-white scale-105"
+                        : "bg-gradient-to-b from-stone-600 to-stone-800 border-stone-500 text-stone-300 hover:scale-105 active:scale-95",
+                    )}
+                  >
+                    Normal
+                  </button>
+                  <button
+                    onClick={() => setDifficulty("hard")}
+                    className={cn(
+                      "px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all",
+                      "border-2 shadow-lg",
+                      difficulty === "hard"
+                        ? "bg-gradient-to-b from-red-500 to-red-700 border-red-400 text-white scale-105"
+                        : "bg-gradient-to-b from-stone-600 to-stone-800 border-stone-500 text-stone-300 hover:scale-105 active:scale-95",
+                    )}
+                  >
+                    Hard
+                  </button>
+                </div>
               </div>
 
               {/* End Turn Button */}

@@ -115,54 +115,48 @@ export function usePythVRF({
       const provider = new ethers.BrowserProvider(ethereumProvider);
       const signer = await provider.getSigner();
 
-      // Check network
-      const network = await provider.getNetwork();
-      console.log("🌐 Network:", Number(network.chainId), network.name);
+      // Check network - use eth_chainId for a fresh read (provider.getNetwork() can cache)
+      const chainIdHex = await ethereumProvider.request({
+        method: "eth_chainId",
+      });
+      const chainId = parseInt(chainIdHex, 16);
+      console.log("🌐 Network chainId:", chainId);
 
-      if (Number(network.chainId) !== 8453) {
+      if (chainId !== 8453) {
         // Try to switch to Base network
         try {
           await ethereumProvider.request({
             method: "wallet_switchEthereumChain",
             params: [{ chainId: "0x2105" }], // Base = 8453 = 0x2105
           });
-
-          // Wait a moment for network to switch
-          await new Promise((resolve) => setTimeout(resolve, 1000));
-
-          // Re-check network
-          const newNetwork = await provider.getNetwork();
-          if (Number(newNetwork.chainId) !== 8453) {
-            throw new Error("Please switch to Base network");
-          }
-
           console.log("✅ Switched to Base network");
         } catch (switchError: any) {
-          // If switch fails, try to add Base network
-          if (switchError.code === 4902) {
-            try {
-              await ethereumProvider.request({
-                method: "wallet_addEthereumChain",
-                params: [
-                  {
-                    chainId: "0x2105",
-                    chainName: "Base",
-                    nativeCurrency: {
-                      name: "Ethereum",
-                      symbol: "ETH",
-                      decimals: 18,
-                    },
-                    rpcUrls: ["https://mainnet.base.org"],
-                    blockExplorerUrls: ["https://basescan.org"],
+          // Re-check chain after error — some wallets error even when already on the right chain
+          const recheckHex = await ethereumProvider.request({
+            method: "eth_chainId",
+          });
+          if (parseInt(recheckHex, 16) === 8453) {
+            console.log(
+              "✅ Already on Base (switch threw but chain is correct)",
+            );
+          } else if (switchError.code === 4902) {
+            await ethereumProvider.request({
+              method: "wallet_addEthereumChain",
+              params: [
+                {
+                  chainId: "0x2105",
+                  chainName: "Base",
+                  nativeCurrency: {
+                    name: "Ethereum",
+                    symbol: "ETH",
+                    decimals: 18,
                   },
-                ],
-              });
-              console.log("✅ Added and switched to Base network");
-            } catch (addError) {
-              throw new Error(
-                "Please add Base network to your wallet and try again",
-              );
-            }
+                  rpcUrls: ["https://mainnet.base.org"],
+                  blockExplorerUrls: ["https://basescan.org"],
+                },
+              ],
+            });
+            console.log("✅ Added and switched to Base network");
           } else {
             throw new Error("Please switch to Base network to open packs");
           }

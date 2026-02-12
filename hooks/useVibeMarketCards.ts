@@ -1,9 +1,8 @@
-'use client';
+"use client";
 
-import { useState, useEffect } from 'react';
-import { usePrivy } from '@privy-io/react-auth';
-import { getOpenedCards, type OpenedCard } from '@/lib/openedCards';
-import type { MemeCardData } from '@/lib/game-context';
+import { useState, useEffect } from "react";
+import { usePrivy } from "@privy-io/react-auth";
+import type { MemeCardData } from "@/lib/game-context";
 
 export function useVibeMarketCards() {
   const { authenticated, user } = usePrivy();
@@ -17,38 +16,37 @@ export function useVibeMarketCards() {
     }
 
     setLoading(true);
-    console.log('Fetching VibeMarket cards for:', user.wallet.address);
-    getOpenedCards(user.wallet.address)
-      .then((vibeCards: OpenedCard[]) => {
-        console.log('Fetched cards:', vibeCards.length);
-        // Convert opened cards to game cards
-        const gameCards: MemeCardData[] = vibeCards.map((card: OpenedCard, index: number) => {
-          // Map rarity number to rarity string
-          const rarityMap: Record<number, string> = {
-            1: 'common',
-            2: 'rare',
-            3: 'epic',
-            4: 'legendary',
-            5: 'legendary'
-          };
-          const rarity = rarityMap[card.rarity] || 'common';
+    console.log("Fetching VibeMarket cards for:", user.wallet.address);
 
-          // Basic stats based on rarity for now
-          const rarityStats = {
-            common: { attack: 2, health: 2, mana: 2 },
-            rare: { attack: 3, health: 3, mana: 3 },
-            epic: { attack: 4, health: 5, mana: 4 },
-            legendary: { attack: 6, health: 6, mana: 5 },
-          };
+    fetch(`/api/cards?owner=${user.wallet.address}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.error) {
+          throw new Error(data.error);
+        }
 
-          const stats = rarityStats[rarity as keyof typeof rarityStats] || rarityStats.common;
+        const apiCards = data.cards || [];
+        console.log("Fetched cards from API:", apiCards.length);
+
+        const rarityStats = {
+          common: { attack: 2, health: 2, mana: 2 },
+          rare: { attack: 3, health: 3, mana: 3 },
+          epic: { attack: 4, health: 5, mana: 4 },
+          legendary: { attack: 6, health: 6, mana: 5 },
+        };
+
+        const gameCards: MemeCardData[] = apiCards.map((card: any) => {
+          const rarity = card.rarity || "common";
+          const stats =
+            rarityStats[rarity as keyof typeof rarityStats] ||
+            rarityStats.common;
 
           return {
-            id: `${card.contractAddress}-${card.tokenId}`,
+            id: card.id,
             name: card.name,
             image: card.image,
-            ticker: `#${card.tokenId}`,
-            rarity: rarity as 'common' | 'rare' | 'epic' | 'legendary',
+            ticker: card.ticker || `#${card.tokenId}`,
+            rarity: rarity as "common" | "rare" | "epic" | "legendary",
             ...stats,
             canAttack: false,
           };
@@ -57,7 +55,7 @@ export function useVibeMarketCards() {
         setCards(gameCards);
       })
       .catch((error) => {
-        console.error('Failed to load cards:', error);
+        console.error("Failed to load cards:", error);
         setCards([]);
       })
       .finally(() => setLoading(false));

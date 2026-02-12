@@ -11,7 +11,7 @@ import {
 import { useVibeMarketCards } from "@/hooks/useVibeMarketCards";
 import { logGameAction } from "@/lib/xmtp";
 import { usePrivy } from "@privy-io/react-auth";
-import { getAIActions } from "@/lib/aiOpponent";
+import { getAIActions, type Difficulty } from "@/lib/aiOpponent";
 
 export interface MemeCardData {
   id: string;
@@ -55,6 +55,7 @@ interface GameState {
     timestamp: number;
   } | null;
   dyingMinions: string[];
+  difficulty: Difficulty;
 }
 
 interface GameContextType extends GameState {
@@ -65,6 +66,7 @@ interface GameContextType extends GameState {
   attackHero: () => void;
   endTurn: () => void;
   resetGame: () => void;
+  setDifficulty: (difficulty: Difficulty) => void;
 }
 
 const GameContext = createContext<GameContextType | null>(null);
@@ -110,6 +112,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
     damageDealt: 0,
     lastDamage: null,
     dyingMinions: [],
+    difficulty: "normal",
   });
 
   // When user cards load, reset game with their cards for BOTH players
@@ -118,7 +121,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
       const shuffled1 = [...userCards].sort(() => Math.random() - 0.5);
       const shuffled2 = [...userCards].sort(() => Math.random() - 0.5);
 
-      setState({
+      setState((prev) => ({
         playerHand: shuffled1.slice(0, 4), // Draw initial 4 cards
         playerDeck: shuffled1.slice(4), // Rest goes in deck
         playerField: [],
@@ -145,7 +148,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
         damageDealt: 0,
         lastDamage: null,
         dyingMinions: [],
-      });
+        difficulty: prev.difficulty, // Preserve difficulty setting
+      }));
     }
   }, [userCards.length]); // Only when length changes (cards loaded)
 
@@ -379,13 +383,16 @@ export function GameProvider({ children }: { children: ReactNode }) {
         }));
 
         // Get AI decisions
-        const actions = getAIActions({
-          opponentHand,
-          opponentField,
-          playerField: prev.playerField,
-          opponentMana: prev.opponentMana,
-          playerHealth: prev.playerHealth,
-        });
+        const actions = getAIActions(
+          {
+            opponentHand,
+            opponentField,
+            playerField: prev.playerField,
+            opponentMana: prev.opponentMana,
+            playerHealth: prev.playerHealth,
+          },
+          prev.difficulty,
+        );
 
         // Execute all actions in one state update
         let newOpponentHand = [...opponentHand];
@@ -571,7 +578,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
       const shuffled1 = [...userCards].sort(() => Math.random() - 0.5);
       const shuffled2 = [...userCards].sort(() => Math.random() - 0.5);
 
-      setState({
+      setState((prev) => ({
         playerHand: shuffled1.slice(0, 4),
         playerDeck: shuffled1.slice(4),
         playerField: [],
@@ -598,9 +605,14 @@ export function GameProvider({ children }: { children: ReactNode }) {
         damageDealt: 0,
         lastDamage: null,
         dyingMinions: [],
-      });
+        difficulty: prev.difficulty, // Preserve difficulty setting
+      }));
     }
   }, [userCards]);
+
+  const setDifficulty = useCallback((difficulty: Difficulty) => {
+    setState((prev) => ({ ...prev, difficulty }));
+  }, []);
 
   return (
     <GameContext.Provider
@@ -613,6 +625,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
         attackHero,
         endTurn,
         resetGame,
+        setDifficulty,
       }}
     >
       {children}

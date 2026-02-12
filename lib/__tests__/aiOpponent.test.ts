@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { getAIActions, getSimpleAIActions } from "../aiOpponent";
+import {
+  getAIActions,
+  getSimpleAIActions,
+  type Difficulty,
+} from "../aiOpponent";
 import type { MemeCardData } from "../game-context";
 
 function makeCard(overrides: Partial<MemeCardData> = {}): MemeCardData {
@@ -153,5 +157,255 @@ describe("getSimpleAIActions", () => {
 
     expect(playActions.length).toBe(1);
     expect(attackActions.length).toBe(1);
+  });
+});
+
+describe("AI Difficulty Levels", () => {
+  describe("Easy difficulty", () => {
+    it("sometimes skips playing cards (30% chance)", () => {
+      let totalPlayed = 0;
+      const iterations = 100;
+
+      for (let i = 0; i < iterations; i++) {
+        const actions = getAIActions(
+          {
+            opponentHand: [
+              makeCard({ id: "h1", mana: 1 }),
+              makeCard({ id: "h2", mana: 1 }),
+              makeCard({ id: "h3", mana: 1 }),
+            ],
+            opponentField: [],
+            playerField: [],
+            opponentMana: 10,
+            playerHealth: 30,
+          },
+          "easy",
+        );
+
+        const playActions = actions.filter((a) => a.type === "PLAY_CARD");
+        totalPlayed += playActions.length;
+      }
+
+      // With 3 cards and 30% skip rate, expect average around 2.1 cards played per iteration
+      const avgPlayed = totalPlayed / iterations;
+      expect(avgPlayed).toBeGreaterThan(1.5); // Should play some cards
+      expect(avgPlayed).toBeLessThan(2.5); // But skip some too
+    });
+
+    it("heavily favors face attacks (90/10 ratio)", () => {
+      let faceAttacks = 0;
+      let minionAttacks = 0;
+      const iterations = 100;
+
+      for (let i = 0; i < iterations; i++) {
+        const actions = getAIActions(
+          {
+            opponentHand: [],
+            opponentField: [makeCard({ id: "m1", canAttack: true })],
+            playerField: [makeCard({ id: "enemy1" })],
+            opponentMana: 0,
+            playerHealth: 30,
+          },
+          "easy",
+        );
+
+        const attack = actions.find(
+          (a) => a.type === "ATTACK_HERO" || a.type === "ATTACK_MINION",
+        );
+        if (attack?.type === "ATTACK_HERO") faceAttacks++;
+        if (attack?.type === "ATTACK_MINION") minionAttacks++;
+      }
+
+      // Should be roughly 90/10 split
+      expect(faceAttacks).toBeGreaterThan(80);
+      expect(minionAttacks).toBeLessThan(20);
+    });
+
+    it("plays cards in random order (not expensive-first)", () => {
+      const orders = new Set<string>();
+      const iterations = 50;
+
+      for (let i = 0; i < iterations; i++) {
+        const actions = getAIActions(
+          {
+            opponentHand: [
+              makeCard({ id: "cheap", mana: 1 }),
+              makeCard({ id: "expensive", mana: 5 }),
+            ],
+            opponentField: [],
+            playerField: [],
+            opponentMana: 10,
+            playerHealth: 30,
+          },
+          "easy",
+        );
+
+        const playActions = actions.filter((a) => a.type === "PLAY_CARD");
+        if (playActions.length >= 2) {
+          const order = playActions.map((a) => a.cardId).join(",");
+          orders.add(order);
+        }
+      }
+
+      // Should see both possible orders over 50 iterations (random, not deterministic)
+      expect(orders.size).toBeGreaterThan(1);
+    });
+  });
+
+  describe("Normal difficulty", () => {
+    it("plays expensive cards first", () => {
+      const actions = getAIActions(
+        {
+          opponentHand: [
+            makeCard({ id: "cheap", mana: 1 }),
+            makeCard({ id: "expensive", mana: 3 }),
+          ],
+          opponentField: [],
+          playerField: [],
+          opponentMana: 5,
+          playerHealth: 30,
+        },
+        "normal",
+      );
+
+      const playActions = actions.filter((a) => a.type === "PLAY_CARD");
+      expect(playActions.length).toBe(2);
+      expect(playActions[0].cardId).toBe("expensive");
+      expect(playActions[1].cardId).toBe("cheap");
+    });
+
+    it("uses 70/30 face/trade ratio", () => {
+      let faceAttacks = 0;
+      let minionAttacks = 0;
+      const iterations = 100;
+
+      for (let i = 0; i < iterations; i++) {
+        const actions = getAIActions(
+          {
+            opponentHand: [],
+            opponentField: [makeCard({ id: "m1", canAttack: true })],
+            playerField: [makeCard({ id: "enemy1" })],
+            opponentMana: 0,
+            playerHealth: 30,
+          },
+          "normal",
+        );
+
+        const attack = actions.find(
+          (a) => a.type === "ATTACK_HERO" || a.type === "ATTACK_MINION",
+        );
+        if (attack?.type === "ATTACK_HERO") faceAttacks++;
+        if (attack?.type === "ATTACK_MINION") minionAttacks++;
+      }
+
+      // Should be roughly 70/30 split
+      expect(faceAttacks).toBeGreaterThan(60);
+      expect(faceAttacks).toBeLessThan(80);
+      expect(minionAttacks).toBeGreaterThan(20);
+      expect(minionAttacks).toBeLessThan(40);
+    });
+  });
+
+  describe("Hard difficulty", () => {
+    it("prioritizes killing low-health enemy minions", () => {
+      const lowHealthEnemy = makeCard({ id: "weak", attack: 5, health: 2 });
+      const highHealthEnemy = makeCard({ id: "strong", attack: 2, health: 10 });
+
+      const actions = getAIActions(
+        {
+          opponentHand: [],
+          opponentField: [makeCard({ id: "m1", attack: 3, canAttack: true })],
+          playerField: [lowHealthEnemy, highHealthEnemy],
+          opponentMana: 0,
+          playerHealth: 30,
+        },
+        "hard",
+      );
+
+      const attack = actions.find((a) => a.type === "ATTACK_MINION");
+      // Should attack the weak minion (can kill it with 3 attack)
+      expect(attack?.targetId).toBe("weak");
+    });
+
+    it("prioritizes killing highest-attack killable target", () => {
+      const weakMinion = makeCard({ id: "weak1", attack: 1, health: 2 });
+      const strongMinion = makeCard({ id: "strong1", attack: 5, health: 3 });
+
+      const actions = getAIActions(
+        {
+          opponentHand: [],
+          opponentField: [makeCard({ id: "m1", attack: 4, canAttack: true })],
+          playerField: [weakMinion, strongMinion],
+          opponentMana: 0,
+          playerHealth: 30,
+        },
+        "hard",
+      );
+
+      const attack = actions.find((a) => a.type === "ATTACK_MINION");
+      // Should attack the strong minion (higher attack, still killable)
+      expect(attack?.targetId).toBe("strong1");
+    });
+
+    it("uses 50/50 face/trade when can't kill anything", () => {
+      let faceAttacks = 0;
+      let minionAttacks = 0;
+      const iterations = 100;
+
+      for (let i = 0; i < iterations; i++) {
+        const actions = getAIActions(
+          {
+            opponentHand: [],
+            opponentField: [makeCard({ id: "m1", attack: 2, canAttack: true })],
+            playerField: [makeCard({ id: "enemy1", health: 10 })],
+            opponentMana: 0,
+            playerHealth: 30,
+          },
+          "hard",
+        );
+
+        const attack = actions.find(
+          (a) => a.type === "ATTACK_HERO" || a.type === "ATTACK_MINION",
+        );
+        if (attack?.type === "ATTACK_HERO") faceAttacks++;
+        if (attack?.type === "ATTACK_MINION") minionAttacks++;
+      }
+
+      // Should be roughly 50/50 split
+      expect(faceAttacks).toBeGreaterThan(40);
+      expect(faceAttacks).toBeLessThan(60);
+      expect(minionAttacks).toBeGreaterThan(40);
+      expect(minionAttacks).toBeLessThan(60);
+    });
+
+    it("trades into highest attack minion when can't kill", () => {
+      const weakMinion = makeCard({ id: "weak", attack: 2, health: 10 });
+      const strongMinion = makeCard({ id: "strong", attack: 8, health: 10 });
+
+      // Run multiple times since 50/50 face/trade is random
+      let attackedStrongMinion = false;
+
+      for (let i = 0; i < 50; i++) {
+        const actions = getAIActions(
+          {
+            opponentHand: [],
+            opponentField: [makeCard({ id: "m1", attack: 2, canAttack: true })],
+            playerField: [weakMinion, strongMinion],
+            opponentMana: 0,
+            playerHealth: 30,
+          },
+          "hard",
+        );
+
+        const attack = actions.find((a) => a.type === "ATTACK_MINION");
+        if (attack?.targetId === "strong") {
+          attackedStrongMinion = true;
+          break;
+        }
+      }
+
+      // When it does trade, should target the highest attack minion
+      expect(attackedStrongMinion).toBe(true);
+    });
   });
 });
