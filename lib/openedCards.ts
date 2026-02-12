@@ -32,7 +32,7 @@ const PACK_ABI = [
 
 function ipfsToHttp(uri: string): string {
   if (uri.startsWith("ipfs://")) {
-    return uri.replace("ipfs://", "https://ipfs.io/ipfs/");
+    return uri.replace("ipfs://", "https://nftstorage.link/ipfs/");
   }
   return uri;
 }

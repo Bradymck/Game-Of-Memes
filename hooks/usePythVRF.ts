@@ -15,9 +15,14 @@ const BOOSTER_DROP_ABI = [
 ];
 
 // Convert IPFS URLs to HTTP gateway URLs
+// Use nftstorage.link — much more reliable than ipfs.io for NFT metadata
 function ipfsToHttp(uri: string): string {
   if (uri.startsWith("ipfs://")) {
-    return uri.replace("ipfs://", "https://ipfs.io/ipfs/");
+    return uri.replace("ipfs://", "https://nftstorage.link/ipfs/");
+  }
+  // Also rewrite if someone already converted to ipfs.io
+  if (uri.includes("ipfs.io/ipfs/")) {
+    return uri.replace("ipfs.io/ipfs/", "nftstorage.link/ipfs/");
   }
   return uri;
 }
@@ -445,15 +450,11 @@ export function usePythVRF({
           await new Promise((resolve) => setTimeout(resolve, 8000));
         } else {
           console.warn(
-            "⚠️ Metadata not propagated after retries — clearing pack cover images",
+            "⚠️ Metadata not fully propagated after retries — keeping current images",
           );
-          // Clear the duplicate pack cover so cards show rarity placeholder
-          // instead of misleadingly showing the pack art as the card face
-          const packCoverUrl = revealedCards[0]?.image;
-          revealedCards = revealedCards.map((card) => ({
-            ...card,
-            image: card.image === packCoverUrl ? "" : card.image,
-          }));
+          // Keep whatever images we have (even pack cover) — better than empty.
+          // The /api/cards endpoint will fetch fresh metadata when the user
+          // loads the game board, by which time propagation should be complete.
         }
       }
 
