@@ -131,6 +131,6 @@ export async function getOpenedCards(ownerAddress: string): Promise<OpenedCard[]
     }
   }
 
-  console.log(`✅ Found ${openedCards.length} opened cards out of ${vibeMarketNfts.length} VibeMarket NFTs`);
-  return openedCards;
+  console.log(`✅ Found ${allCards.length} opened cards`);
+  return allCards;
 }
