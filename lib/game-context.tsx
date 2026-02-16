@@ -1,6 +1,7 @@
 "use client"
 
-import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from "react"
+import { createContext, useContext, useState, useCallback, useEffect, useRef, type ReactNode } from "react"
+import { useSearchParams } from "next/navigation"
 import { useVibeMarketCards } from "@/hooks/useVibeMarketCards"
 import { logGameAction } from "@/lib/xmtp"
 import { usePrivy } from "@privy-io/react-auth"
@@ -9,7 +10,7 @@ export interface MemeCardData {
   id: string
   name: string
   image: string
-  rarity: "common" | "rare" | "epic" | "legendary"
+  rarity: "common" | "rare" | "epic" | "legendary" | "mythic"
   attack: number
   health: number
   mana: number
@@ -23,6 +24,7 @@ interface GameState {
   playerField: MemeCardData[]
   playerDeck: MemeCardData[]
   playerGraveyard: MemeCardData[]
+  opponentHand: MemeCardData[]
   opponentField: MemeCardData[]
   opponentDeck: MemeCardData[]
   opponentGraveyard: MemeCardData[]
@@ -139,8 +141,10 @@ const initialOpponentField: MemeCardData[] = [
 const GameContext = createContext<GameContextType | null>(null)
 
 export function GameProvider({ children }: { children: ReactNode }) {
+  const searchParams = useSearchParams();
   const { cards: userCards, loading: cardsLoading } = useVibeMarketCards();
   const { user } = usePrivy();
+  const gameInitialized = useRef(false);
 
   // Ghost loading cards (ethereal placeholders while NFTs load)
   const ghostCards: MemeCardData[] = Array.from({ length: 4 }, (_, i) => ({
@@ -159,6 +163,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
     playerField: [],
     playerDeck: [], // Will be populated when cards load
     playerGraveyard: [],
+    opponentHand: [],
     opponentField: [],
     opponentDeck: [],
     opponentGraveyard: [],
@@ -180,39 +185,93 @@ export function GameProvider({ children }: { children: ReactNode }) {
     dyingMinions: [],
   })
 
-  // When user cards load, reset game with their cards for BOTH players
+  // Initialize game with cards - check drafted cards first, then user cards
   useEffect(() => {
-    if (userCards.length > 0) {
-      const shuffled1 = [...userCards].sort(() => Math.random() - 0.5);
-      const shuffled2 = [...userCards].sort(() => Math.random() - 0.5);
+    // Skip on server (no sessionStorage)
+    if (typeof window === 'undefined') return;
+    if (gameInitialized.current) return;
 
-      setState({
-        playerHand: shuffled1.slice(0, 4), // Draw initial 4 cards
-        playerDeck: shuffled1.slice(4), // Rest goes in deck
-        playerField: [],
-        playerGraveyard: [],
-        opponentField: shuffled2.slice(0, 2).map(c => ({ ...c, canAttack: false })), // Opponent starts with 2 cards on board
-        opponentDeck: shuffled2.slice(2), // Rest in opponent deck
-        opponentGraveyard: [],
-        playerMana: 1,
-        maxPlayerMana: 1,
-        opponentMana: 1,
-        maxOpponentMana: 1,
-        playerHealth: 30,
-        opponentHealth: 30,
-        selectedCard: null,
-        selectedAttacker: null,
-        isPlayerTurn: true,
-        turnNumber: 1,
-        gameOver: false,
-        playerWon: null,
-        cardsPlayed: 0,
-        damageDealt: 0,
-        lastDamage: null,
-        dyingMinions: [],
-      });
+    // Check for drafted cards from pack opening (stored in sessionStorage)
+    const source = searchParams.get('source');
+    console.log('🔍 Game init - source param:', source);
+
+    // Try to load drafted cards regardless of URL param (in case URL param got lost)
+    try {
+      const draftedCardsJson = sessionStorage.getItem('draftedCards');
+      console.log('🔍 sessionStorage draftedCards exists:', !!draftedCardsJson);
+
+      if (draftedCardsJson) {
+        console.log('🔍 draftedCardsJson preview:', draftedCardsJson?.slice(0, 200) + '...');
+        const draftedCards = JSON.parse(draftedCardsJson) as MemeCardData[];
+        console.log('🎴 Parsed drafted cards:', draftedCards.length);
+        console.log('🎴 First card:', draftedCards[0]);
+
+        if (draftedCards.length > 0) {
+          gameInitialized.current = true;
+          initializeGameWithCards(draftedCards);
+          // Clear the drafted cards from storage after using them
+          sessionStorage.removeItem('draftedCards');
+          return;
+        }
+      }
+    } catch (e) {
+      console.error('Failed to load drafted cards:', e);
     }
-  }, [userCards.length]); // Only when length changes (cards loaded)
+
+    // Fallback to user's opened cards from Alchemy
+    if (userCards.length > 0) {
+      console.log('🎴 Using user cards from Alchemy:', userCards.length);
+      console.log('🎴 First user card:', userCards[0]);
+      gameInitialized.current = true;
+      initializeGameWithCards(userCards);
+    } else {
+      console.log('⚠️ No cards available - userCards.length:', userCards.length);
+    }
+  }, [searchParams, userCards.length]);
+
+  // Helper function to initialize game state with a set of cards
+  const initializeGameWithCards = (cards: MemeCardData[]) => {
+    console.log('🎮 initializeGameWithCards called with', cards.length, 'cards');
+    console.log('🎮 Sample card:', cards[0]);
+
+    // Give unique IDs to avoid conflicts between player and opponent copies
+    const playerCards = cards.map((c, i) => ({ ...c, id: `p-${c.id}-${i}` }));
+    const opponentCards = cards.map((c, i) => ({ ...c, id: `o-${c.id}-${i}` }));
+
+    console.log('🎮 Player cards sample:', playerCards[0]);
+
+    const shuffled1 = [...playerCards].sort(() => Math.random() - 0.5);
+    const shuffled2 = [...opponentCards].sort(() => Math.random() - 0.5);
+
+    console.log('🎮 Hand cards will be:', shuffled1.slice(0, 4).map(c => ({ name: c.name, image: c.image?.slice(0, 50) })));
+
+    setState({
+      playerHand: shuffled1.slice(0, 4), // Draw initial 4 cards
+      playerDeck: shuffled1.slice(4), // Rest goes in deck
+      playerField: [],
+      playerGraveyard: [],
+      opponentHand: shuffled2.slice(0, 4), // AI also starts with 4 cards in hand
+      opponentField: [], // AI starts with empty field, will play cards on its turn
+      opponentDeck: shuffled2.slice(4), // Rest in opponent deck
+      opponentGraveyard: [],
+      playerMana: 1,
+      maxPlayerMana: 1,
+      opponentMana: 1,
+      maxOpponentMana: 1,
+      playerHealth: 30,
+      opponentHealth: 30,
+      selectedCard: null,
+      selectedAttacker: null,
+      isPlayerTurn: true,
+      turnNumber: 1,
+      gameOver: false,
+      playerWon: null,
+      cardsPlayed: 0,
+      damageDealt: 0,
+      lastDamage: null,
+      dyingMinions: [],
+    });
+  };
 
   const playCard = useCallback((cardId: string) => {
     setState((prev) => {
@@ -364,43 +423,171 @@ export function GameProvider({ children }: { children: ReactNode }) {
       selectedAttacker: null,
     }))
 
-    // AI opponent turn - attacks with all minions!
+    // AI opponent turn - Phase 1: Play cards
     setTimeout(() => {
       setState((prev) => {
-        // AI: Attack player with all available minions (ALWAYS GO FACE!)
-        let playerHealth = prev.playerHealth;
-        const attackedMinions = prev.opponentField.map(minion => {
-          if (minion.canAttack) {
-            playerHealth -= minion.attack; // Attack player directly
+        if (prev.gameOver) return prev;
 
-            // Log AI attack
+        // AI plays cards from hand (simple AI: play cards it can afford, prioritize higher mana cards)
+        let opponentMana = prev.opponentMana;
+        let opponentHand = [...prev.opponentHand];
+        let opponentField = [...prev.opponentField];
+
+        // Sort by mana cost descending (play expensive cards first)
+        const playableCards = opponentHand
+          .filter(card => card.mana <= opponentMana && opponentField.length < 7)
+          .sort((a, b) => b.mana - a.mana);
+
+        for (const card of playableCards) {
+          if (card.mana <= opponentMana && opponentField.length < 7) {
+            console.log(`🤖 AI plays ${card.name} (${card.mana} mana)`);
+            opponentHand = opponentHand.filter(c => c.id !== card.id);
+            opponentField.push({ ...card, canAttack: false }); // Summoning sickness
+            opponentMana -= card.mana;
+
+            // Log AI play
             if (user?.wallet?.address) {
               logGameAction({
-                type: 'attack_hero',
+                type: 'play_card',
                 actor: 'AI',
-                data: { attacker: minion.name, damage: minion.attack }
+                data: { cardName: card.name, mana: card.mana }
               }, user.wallet.address);
             }
-
-            return { ...minion, canAttack: false };
           }
-          return minion;
-        });
-
-        // Check if AI won
-        const gameOver = playerHealth <= 0;
+        }
 
         return {
           ...prev,
-          playerHealth,
-          opponentField: attackedMinions,
-          gameOver,
-          playerWon: gameOver ? false : null,
+          opponentHand,
+          opponentField,
+          opponentMana,
         };
       });
-    }, 800);
+    }, 500);
 
-    // End AI turn, start player turn
+    // AI opponent turn - Phase 2: Attack (with visual feedback)
+    // Execute AI attacks one at a time with delays for visual feedback
+    const executeAIAttacks = async () => {
+      let attackDelay = 1200; // Start after play phase
+
+      setState((prev) => {
+        if (prev.gameOver) return prev;
+
+        const attackingMinions = prev.opponentField.filter(m => m.canAttack && m.health > 0);
+
+        // Schedule each attack with visual feedback
+        attackingMinions.forEach((minion, index) => {
+          setTimeout(() => {
+            setState((current) => {
+              if (current.gameOver) return current;
+
+              // Find the minion in current state (it may have been updated)
+              const currentMinion = current.opponentField.find(m => m.id === minion.id);
+              if (!currentMinion || !currentMinion.canAttack || currentMinion.health <= 0) {
+                return current;
+              }
+
+              let playerHealth = current.playerHealth;
+              let playerField = [...current.playerField];
+              let opponentField = [...current.opponentField];
+              let lastDamage = current.lastDamage;
+              let dyingMinions = [...current.dyingMinions];
+
+              // If player has minions, attack them
+              if (playerField.length > 0) {
+                // Attack the weakest minion
+                const targetIndex = playerField.reduce((minIdx, curr, idx, arr) =>
+                  curr.health < arr[minIdx].health ? idx : minIdx, 0);
+                const target = playerField[targetIndex];
+
+                console.log(`🤖 AI's ${currentMinion.name} attacks ${target.name}`);
+
+                // Combat damage
+                const newTargetHealth = target.health - currentMinion.attack;
+                const newMinionHealth = currentMinion.health - target.attack;
+
+                // Update minion states
+                playerField = playerField.map(c =>
+                  c.id === target.id ? { ...c, health: newTargetHealth } : c
+                );
+                opponentField = opponentField.map(c =>
+                  c.id === currentMinion.id ? { ...c, health: newMinionHealth, canAttack: false } : c
+                );
+
+                // Set lastDamage for visual feedback on target
+                lastDamage = { targetId: target.id, amount: currentMinion.attack, timestamp: Date.now() };
+
+                // Mark dying minions
+                if (newTargetHealth <= 0) dyingMinions.push(target.id);
+                if (newMinionHealth <= 0) dyingMinions.push(currentMinion.id);
+
+                // Log AI attack
+                if (user?.wallet?.address) {
+                  logGameAction({
+                    type: 'attack_minion',
+                    actor: 'AI',
+                    data: { attacker: currentMinion.name, target: target.name, damage: currentMinion.attack }
+                  }, user.wallet.address);
+                }
+              } else {
+                // No blockers - attack face!
+                console.log(`🤖 AI's ${currentMinion.name} attacks player for ${currentMinion.attack} damage!`);
+                playerHealth -= currentMinion.attack;
+
+                // Update minion canAttack
+                opponentField = opponentField.map(c =>
+                  c.id === currentMinion.id ? { ...c, canAttack: false } : c
+                );
+
+                // Set lastDamage for visual feedback on hero (null targetId = hero)
+                lastDamage = { targetId: 'player-hero', amount: currentMinion.attack, timestamp: Date.now() };
+
+                // Log AI attack
+                if (user?.wallet?.address) {
+                  logGameAction({
+                    type: 'attack_hero',
+                    actor: 'AI',
+                    data: { attacker: currentMinion.name, damage: currentMinion.attack }
+                  }, user.wallet.address);
+                }
+              }
+
+              // Check if AI won
+              const gameOver = playerHealth <= 0;
+
+              return {
+                ...current,
+                playerHealth,
+                playerField,
+                opponentField,
+                lastDamage,
+                dyingMinions,
+                gameOver,
+                playerWon: gameOver ? false : null,
+              };
+            });
+
+            // Clean up dying minions after animation
+            setTimeout(() => {
+              setState((current) => ({
+                ...current,
+                playerField: current.playerField.filter(c => c.health > 0),
+                opponentField: current.opponentField.filter(c => c.health > 0),
+                dyingMinions: [],
+              }));
+            }, 800);
+
+          }, attackDelay + index * 600); // 600ms between each AI attack
+        });
+
+        return prev; // Don't change state in this initial call
+      });
+    };
+
+    setTimeout(executeAIAttacks, 500);
+
+    // End AI turn, start player turn (wait longer to allow all attack animations to complete)
+    // Max attacks = 7 minions * 600ms each + 1200ms base + 800ms cleanup = ~6200ms
     setTimeout(() => {
       setState((prev) => {
         if (prev.gameOver) return prev; // Don't continue if game ended
@@ -408,9 +595,9 @@ export function GameProvider({ children }: { children: ReactNode }) {
         const newMaxMana = Math.min(10, prev.maxPlayerMana + 1);
         const newOpponentMaxMana = Math.min(10, prev.maxOpponentMana + 1);
 
-        // Draw a card from player deck (if any left, else recycle graveyard)
-        let playerDeck = prev.playerDeck;
-        let playerGraveyard = prev.playerGraveyard;
+        // Draw a card from player deck
+        let playerDeck = [...prev.playerDeck];
+        let playerGraveyard = [...prev.playerGraveyard];
 
         // If deck is empty, shuffle graveyard back into deck
         if (playerDeck.length === 0 && playerGraveyard.length > 0) {
@@ -421,6 +608,19 @@ export function GameProvider({ children }: { children: ReactNode }) {
         const drawnCard = playerDeck[0];
         const playerHand = drawnCard ? [...prev.playerHand, drawnCard] : prev.playerHand;
         playerDeck = drawnCard ? playerDeck.slice(1) : playerDeck;
+
+        // AI also draws a card
+        let opponentDeck = [...prev.opponentDeck];
+        let opponentGraveyard = [...prev.opponentGraveyard];
+
+        if (opponentDeck.length === 0 && opponentGraveyard.length > 0) {
+          opponentDeck = [...opponentGraveyard].sort(() => Math.random() - 0.5);
+          opponentGraveyard = [];
+        }
+
+        const aiDrawnCard = opponentDeck[0];
+        const opponentHand = aiDrawnCard ? [...prev.opponentHand, aiDrawnCard] : prev.opponentHand;
+        opponentDeck = aiDrawnCard ? opponentDeck.slice(1) : opponentDeck;
 
         // Log card draw
         if (drawnCard && user?.wallet?.address) {
@@ -437,6 +637,9 @@ export function GameProvider({ children }: { children: ReactNode }) {
           playerHand,
           playerDeck,
           playerGraveyard,
+          opponentHand,
+          opponentDeck,
+          opponentGraveyard,
           playerMana: newMaxMana,
           maxPlayerMana: newMaxMana,
           opponentMana: newOpponentMaxMana,
@@ -444,41 +647,32 @@ export function GameProvider({ children }: { children: ReactNode }) {
           turnNumber: prev.turnNumber + 1,
           playerField: prev.playerField.map((c) => ({ ...c, canAttack: true })),
           opponentField: prev.opponentField.map((c) => ({ ...c, canAttack: true })),
+          lastDamage: null, // Clear damage indicator
         }
       })
-    }, 2000)
+    }, 5000) // Wait 5 seconds for all AI attack animations
   }, [user?.wallet?.address])
 
   const resetGame = useCallback(() => {
-    if (userCards.length > 0) {
-      const shuffled1 = [...userCards].sort(() => Math.random() - 0.5);
-      const shuffled2 = [...userCards].sort(() => Math.random() - 0.5);
+    // Try to use drafted cards first, then fallback to user cards
+    let cardsToUse: MemeCardData[] = [];
 
-      setState({
-        playerHand: shuffled1.slice(0, 4),
-        playerDeck: shuffled1.slice(4),
-        playerField: [],
-        playerGraveyard: [],
-        opponentField: shuffled2.slice(0, 2).map(c => ({ ...c, canAttack: false })),
-        opponentDeck: shuffled2.slice(2),
-        opponentGraveyard: [],
-        playerMana: 1,
-        maxPlayerMana: 1,
-        opponentMana: 1,
-        maxOpponentMana: 1,
-        playerHealth: 30,
-        opponentHealth: 30,
-        selectedCard: null,
-        selectedAttacker: null,
-        isPlayerTurn: true,
-        turnNumber: 1,
-        gameOver: false,
-        playerWon: null,
-        cardsPlayed: 0,
-        damageDealt: 0,
-        lastDamage: null,
-        dyingMinions: [],
-      });
+    try {
+      const draftedCardsJson = sessionStorage.getItem('draftedCards');
+      if (draftedCardsJson) {
+        cardsToUse = JSON.parse(draftedCardsJson);
+      }
+    } catch (e) {
+      // Ignore
+    }
+
+    if (cardsToUse.length === 0 && userCards.length > 0) {
+      cardsToUse = userCards;
+    }
+
+    if (cardsToUse.length > 0) {
+      gameInitialized.current = false; // Allow re-initialization
+      initializeGameWithCards(cardsToUse);
     }
   }, [userCards])
 

@@ -310,6 +310,7 @@ export function GameBoard() {
                 maxMana={maxPlayerMana}
                 isPlayer
                 image={user?.wallet?.address ? `https://metadata.ens.domains/mainnet/avatar/${user.wallet.address.toLowerCase()}` : undefined}
+                damageTaken={lastDamage?.targetId === 'player-hero' ? lastDamage.amount : null}
               />
             </div>
 

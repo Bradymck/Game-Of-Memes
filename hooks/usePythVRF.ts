@@ -252,20 +252,37 @@ export function usePythVRF({ packId, onConfirmed, onError }: UsePythVRFOptions) 
               // VRF fulfilled! Fetch metadata
               const tokenUri = await contract.tokenURI(tokenId)
               const httpUri = ipfsToHttp(tokenUri)
+              console.log(`📄 Fetching metadata for ${tokenId}:`, httpUri)
+
               const metaResponse = await fetch(httpUri)
               const metadata = await metaResponse.json()
+              console.log(`📦 Metadata for ${tokenId}:`, metadata)
+
+              // Get image - try to get the opened card image
+              let imageUrl = metadata.image || '/placeholder.jpg'
+              imageUrl = ipfsToHttp(imageUrl)
+              console.log(`🖼️ Image URL for ${tokenId}:`, imageUrl)
+
+              // Calculate stats based on rarity
+              const cardRarity = rarityMap[rarity] || 'common'
+              const rarityStats: Record<string, { attack: number; health: number; mana: number }> = {
+                common: { attack: 2, health: 2, mana: 2 },
+                rare: { attack: 3, health: 4, mana: 3 },
+                epic: { attack: 5, health: 5, mana: 4 },
+                legendary: { attack: 7, health: 6, mana: 5 },
+                mythic: { attack: 8, health: 8, mana: 6 },
+              }
+              const stats = rarityStats[cardRarity] || rarityStats.common
 
               return {
                 tokenId,
                 card: {
                   id: `${parsed.contractAddress}-${tokenId}`,
                   name: metadata.name || `Card #${tokenId}`,
-                  image: ipfsToHttp(metadata.image || '/placeholder.jpg'),
+                  image: imageUrl,
                   ticker: metadata.attributes?.find((a: any) => a.trait_type === 'Ticker')?.value || '',
-                  rarity: rarityMap[rarity] || 'common',
-                  attack: 3,
-                  health: 3,
-                  mana: 2,
+                  rarity: cardRarity,
+                  ...stats,
                   isRevealed: false,
                 } as PackCard
               }

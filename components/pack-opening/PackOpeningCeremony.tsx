@@ -87,7 +87,26 @@ export function PackOpeningCeremony({ packId, packName = 'Mystery Pack' }: PackO
   }, [state, currentRevealIndex, cards.length])
 
   // Navigation handlers
-  const handlePlayGame = () => router.push('/')
+  const handlePlayGame = () => {
+    // Store the opened cards in sessionStorage so the game can use them immediately
+    // (Alchemy might not have indexed them yet)
+    const gameCards = cards.map(card => ({
+      id: card.id,
+      name: card.name,
+      image: card.image,
+      rarity: card.rarity,
+      attack: card.attack,
+      health: card.health,
+      mana: card.mana,
+      ticker: card.ticker || `#${card.id.split('-').pop()}`,
+      ability: card.ability,
+    }))
+    console.log('🎮 Storing drafted cards:', gameCards.length)
+    console.log('🎮 First card to store:', gameCards[0])
+    sessionStorage.setItem('draftedCards', JSON.stringify(gameCards))
+    console.log('🎮 Stored in sessionStorage, navigating to game...')
+    router.push('/?source=draft')
+  }
   const handleOpenAnother = () => router.push('/draft')
   const handleShare = async () => {
     // TODO: Implement social sharing with html2canvas

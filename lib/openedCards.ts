@@ -3,15 +3,6 @@ import { base } from 'viem/chains';
 
 const ALCHEMY_KEY = process.env.NEXT_PUBLIC_ALCHEMY_API_KEY;
 
-const VIBEMARKET_CONTRACTS = [
-  '0x20306f3C373A445A0C607Bb0eB5Df15d29952FA4',
-  '0x3eA4861190176BcB192764B1496EbEB7e38bC366',
-  '0xEa6045410D3024b5Fb22AA531c13A31Dae0a56Ea',
-  '0xF14C1dC8Ce5fE65413379F76c43fA1460C31E728',
-  '0xc0B02E8e9f56A449CcCDc83AE053B887f2E6eBDd',
-  '0xfF18ff973337BCc07d4B5a8Fa741b904014a1172',
-];
-
 const PACK_ABI = [
   {
     name: 'getTokenRarity',
@@ -32,88 +23,103 @@ export interface OpenedCard {
 }
 
 /**
- * Get OPENED cards using Transfer indexer + on-chain rarity check
+ * Get OPENED cards by fetching all VibeMarket NFTs and checking on-chain rarity
+ * Rarity 0 = unopened pack, Rarity 1-5 = opened card
  */
 export async function getOpenedCards(ownerAddress: string): Promise<OpenedCard[]> {
-  console.log('🎴 Indexing opened cards...');
+  console.log('🎴 Fetching opened cards for:', ownerAddress);
 
   const client = createPublicClient({
     chain: base,
     transport: http(`https://base-mainnet.g.alchemy.com/v2/${ALCHEMY_KEY}`),
   });
 
-  const allCards: OpenedCard[] = [];
+  // Step 1: Fetch ALL NFTs from Alchemy
+  let allNfts: any[] = [];
+  let pageKey: string | undefined;
 
-  for (const contract of VIBEMARKET_CONTRACTS) {
+  do {
+    const url = `https://base-mainnet.g.alchemy.com/nft/v3/${ALCHEMY_KEY}/getNFTsForOwner?owner=${ownerAddress}&withMetadata=true&pageSize=100${pageKey ? `&pageKey=${pageKey}` : ''}`;
+    const response = await fetch(url);
+    const data = await response.json();
+    allNfts = [...allNfts, ...data.ownedNfts];
+    pageKey = data.pageKey;
+  } while (pageKey);
+
+  console.log(`📦 Found ${allNfts.length} total NFTs, filtering for VibeMarket...`);
+
+  // Step 2: Filter for VibeMarket NFTs (check description for vibe.market)
+  const vibeMarketNfts = allNfts.filter((nft: any) => {
+    const description = nft.raw?.metadata?.description || nft.description || '';
+    return description.toLowerCase().includes('vibe.market');
+  });
+
+  console.log(`🎯 Found ${vibeMarketNfts.length} VibeMarket NFTs, checking rarity on-chain...`);
+
+  // Step 3: Check on-chain rarity for each NFT - only include opened cards (rarity 1-5)
+  const openedCards: OpenedCard[] = [];
+
+  for (const nft of vibeMarketNfts) {
+    const contractAddress = nft.contract.address;
+    const tokenId = nft.tokenId;
+
     try {
-      // Get Transfer events
-      const transfersTo = await client.getLogs({
-        address: contract as `0x${string}`,
-        event: { type: 'event', name: 'Transfer', inputs: [
-          { indexed: true, name: 'from', type: 'address' },
-          { indexed: true, name: 'to', type: 'address' },
-          { indexed: true, name: 'tokenId', type: 'uint256' }
-        ]},
-        args: { to: ownerAddress as `0x${string}` },
-        fromBlock: 'earliest',
-        toBlock: 'latest',
+      // Check on-chain rarity (this is the source of truth)
+      const [rarity] = await client.readContract({
+        address: contractAddress as `0x${string}`,
+        abi: PACK_ABI,
+        functionName: 'getTokenRarity',
+        args: [BigInt(tokenId)],
       });
 
-      const transfersFrom = await client.getLogs({
-        address: contract as `0x${string}`,
-        event: { type: 'event', name: 'Transfer', inputs: [
-          { indexed: true, name: 'from', type: 'address' },
-          { indexed: true, name: 'to', type: 'address' },
-          { indexed: true, name: 'tokenId', type: 'uint256' }
-        ]},
-        args: { from: ownerAddress as `0x${string}` },
-        fromBlock: 'earliest',
-        toBlock: 'latest',
-      });
+      const rarityNum = Number(rarity);
 
-      const received = new Set(transfersTo.map(log => log.args.tokenId!.toString()));
-      const sent = new Set(transfersFrom.map(log => log.args.tokenId!.toString()));
-      const owned: string[] = [];
-      received.forEach(tokenId => {
-        if (!sent.has(tokenId)) owned.push(tokenId);
-      });
-
-      console.log(`📦 ${contract}: ${owned.length} owned, checking rarity...`);
-
-      // Check rarity - only include rarity 1-5 (opened cards)
-      for (const tokenId of owned) {
-        try {
-          const [rarity] = await client.readContract({
-            address: contract as `0x${string}`,
-            abi: PACK_ABI,
-            functionName: 'getTokenRarity',
-            args: [BigInt(tokenId)],
-          });
-
-          if (Number(rarity) >= 1 && Number(rarity) <= 5) {
-            // Fetch metadata
-            const metaUrl = `https://base-mainnet.g.alchemy.com/nft/v3/${ALCHEMY_KEY}/getNFTMetadata?contractAddress=${contract}&tokenId=${tokenId}`;
-            const metaResponse = await fetch(metaUrl);
-            const metaData = await metaResponse.json();
-
-            allCards.push({
-              id: `${contract}-${tokenId}`,
-              tokenId,
-              contractAddress: contract,
-              name: metaData.name || `Card #${tokenId}`,
-              image: metaData.image?.cachedUrl || metaData.image?.originalUrl || '/placeholder.jpg',
-              rarity: Number(rarity),
-            });
-          }
-        } catch {
-          // Skip
-        }
+      // Only include opened cards (rarity 1-5)
+      // Rarity 0 = unopened pack, skip it
+      if (rarityNum >= 1 && rarityNum <= 5) {
+        openedCards.push({
+          id: `${contractAddress}-${tokenId}`,
+          tokenId,
+          contractAddress,
+          name: nft.name || nft.title || `Card #${tokenId}`,
+          image: nft.image?.cachedUrl || nft.image?.originalUrl || nft.image?.thumbnailUrl || '/placeholder.jpg',
+          rarity: rarityNum,
+        });
+        console.log(`✅ Card ${tokenId}: rarity ${rarityNum} (opened)`);
+      } else {
+        console.log(`⏭️ Pack ${tokenId}: rarity ${rarityNum} (unopened, skipping)`);
       }
     } catch (error) {
-      console.error(`Error for ${contract}:`, error);
+      // If getTokenRarity fails, check metadata attributes as fallback
+      const statusAttr = nft.raw?.metadata?.attributes?.find(
+        (a: any) => a.trait_type?.toLowerCase() === 'status'
+      );
+      const rarityAttr = nft.raw?.metadata?.attributes?.find(
+        (a: any) => a.trait_type?.toLowerCase() === 'rarity'
+      );
+
+      // If status is 'minted' (unopened) or rarity is 'unopened', skip
+      const isMinted = statusAttr?.value?.toLowerCase() === 'minted';
+      const isUnopened = rarityAttr?.value?.toLowerCase() === 'unopened';
+
+      if (!isMinted && !isUnopened) {
+        // Assume it's an opened card if we can't check on-chain and metadata doesn't say unopened
+        const rarityValue = parseInt(rarityAttr?.value) || 1;
+        openedCards.push({
+          id: `${contractAddress}-${tokenId}`,
+          tokenId,
+          contractAddress,
+          name: nft.name || nft.title || `Card #${tokenId}`,
+          image: nft.image?.cachedUrl || nft.image?.originalUrl || nft.image?.thumbnailUrl || '/placeholder.jpg',
+          rarity: rarityValue,
+        });
+        console.log(`⚠️ Card ${tokenId}: using metadata fallback, assumed opened`);
+      } else {
+        console.log(`⏭️ Pack ${tokenId}: metadata indicates unopened, skipping`);
+      }
     }
   }
 
-  console.log(`✅ Found ${allCards.length} opened cards`);
-  return allCards;
+  console.log(`✅ Found ${openedCards.length} opened cards out of ${vibeMarketNfts.length} VibeMarket NFTs`);
+  return openedCards;
 }
