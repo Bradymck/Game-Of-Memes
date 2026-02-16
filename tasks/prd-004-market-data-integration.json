@@ -1,0 +1,89 @@
+{
+  "id": "PRD-004",
+  "title": "Pack Token Market Data → Card Stats Integration",
+  "status": "completed",
+  "completedAt": "2026-02-12T04:44:00Z",
+  "agent": "pixel",
+  "priority": "P0",
+  "description": "Wire live token market data into card stats so each card's attack, health, and mana are derived from its pack's ERC20 token performance (price, market cap, liquidity). This is the game's core differentiator — 'the only card game where your cards pump with the token'. Use DexScreener's free API for price data. The existing marketStats.ts has all the calculation logic ready, it just needs a data source and to be wired into the card loading pipeline. Stats are IMMUTABLE during a match (snapshot at deck load). Gracefully fall back to rarity-based stats if the API fails or the token has no DEX listing.",
+  "acceptance_criteria": [
+    "npx tsc --noEmit exits with 0 errors",
+    "npm test passes with 70+ tests (existing 65 + new market data tests)",
+    "npm run build succeeds with no errors",
+    "Cards loaded from /api/cards include market-derived stats when token has a DEX listing",
+    "Cards fall back to rarity-based stats when DexScreener returns no data",
+    "MemeCardData interface includes optional marketData field for display",
+    "Game board shows a small price badge or indicator on cards with market data",
+    "marketStats.ts calculateCardStats() is actually called in the card loading pipeline"
+  ],
+  "implementation_guide": {
+    "step_1": {
+      "description": "Create a token price fetching module using DexScreener's free API",
+      "file": "lib/tokenPriceAPI.ts",
+      "action": "create",
+      "details": "Export async function fetchTokenMarketData(tokenAddress: string): Promise<MarketData | null>. Use DexScreener API: https://api.dexscreener.com/latest/dex/tokens/{address}. Parse the response to extract price, marketCap, liquidity (reserveUsd), volume24h, priceChange24h. Return null if no pairs found. Add 30-second cache (simple Map with TTL) to avoid hammering the API during deck loads."
+    },
+    "step_2": {
+      "description": "Add a getPackTokenAddress helper that extracts the ERC20 token address from VibeMarket pack metadata",
+      "file": "lib/vibemarket.ts",
+      "action": "modify",
+      "details": "The getPackInfo() function at line 241 already fetches pack contract info from Wield API. Add a helper function getPackTokenAddress(contractAddress: string): Promise<string | null> that calls getPackInfo and extracts the ERC20 token address from the response. The Wield API response likely includes a 'tokenAddress' or 'erc20Address' field. If not available, return null."
+    },
+    "step_3": {
+      "description": "Update the /api/cards route to enrich cards with market data",
+      "file": "app/api/cards/route.ts",
+      "action": "modify",
+      "details": "After building the revealed cards array (line 162-201), for each unique contractAddress, call getPackTokenAddress to get the ERC20 address, then call fetchTokenMarketData to get market data. Use calculateCardStats from marketStats.ts to compute stats. Merge these into each card object, overriding the rarity-based stats. Add a 'marketData' field with price, priceChange24h, and marketCap for display purposes. If market data fetch fails, keep the existing rarity-based stats (graceful fallback). Cache the pack-to-token mapping to avoid redundant API calls."
+    },
+    "step_4": {
+      "description": "Extend MemeCardData interface to include optional market display data",
+      "file": "lib/game-context.tsx",
+      "action": "modify",
+      "details": "Add to MemeCardData interface: marketData?: { price: number; priceChange24h: number; marketCap: number; }. This is display-only — the actual attack/health/mana fields are already set by the API. No other changes to game-context.tsx needed."
+    },
+    "step_5": {
+      "description": "Update useVibeMarketCards to pass through market data from API",
+      "file": "hooks/useVibeMarketCards.ts",
+      "action": "modify",
+      "details": "Instead of always applying rarityStats (lines 31-36), check if the API returned market-derived stats. If the card from the API has attack/health/mana fields, use those directly. If not, fall back to rarityStats. Also pass through marketData if present."
+    },
+    "step_6": {
+      "description": "Add a small market data badge to cards on the game board",
+      "file": "components/game-board.tsx",
+      "action": "modify",
+      "details": "On player field cards and hand cards, if card.marketData exists, show a small badge with the price and 24h change (green up arrow / red down arrow). Keep it minimal — a tiny overlay in the corner of the card. Don't add it to opponent cards."
+    },
+    "step_7": {
+      "description": "Write tests for the new market data pipeline",
+      "file": "lib/__tests__/marketStats.test.ts",
+      "action": "create",
+      "details": "Test calculateAttack, calculateDefense, calculateCost, calculateRarity, calculateCardStats, isCardPlayable, formatMarketCap, formatPrice. Also test the cache in tokenPriceAPI (mock fetch). Test the fallback behavior when market data is unavailable. Aim for 8+ tests."
+    }
+  },
+  "files_to_create": [
+    "lib/tokenPriceAPI.ts",
+    "lib/__tests__/marketStats.test.ts"
+  ],
+  "files_to_modify": [
+    "lib/vibemarket.ts",
+    "app/api/cards/route.ts",
+    "lib/game-context.tsx",
+    "hooks/useVibeMarketCards.ts",
+    "components/game-board.tsx"
+  ],
+  "api_reference": {
+    "dexscreener": {
+      "endpoint": "https://api.dexscreener.com/latest/dex/tokens/{tokenAddress}",
+      "auth": "none (free API)",
+      "rate_limit": "300 requests/min",
+      "response_fields": "pairs[0].priceUsd, pairs[0].fdv (marketCap), pairs[0].liquidity.usd, pairs[0].volume.h24, pairs[0].priceChange.h24"
+    },
+    "wield_pack_info": {
+      "endpoint": "https://build.wield.xyz/vibe/boosterbox/contractAddress/{contractAddress}",
+      "auth": "API-KEY header (WIELD_API_KEY env var)",
+      "note": "Already implemented in lib/vibemarket.ts:241 getPackInfo()"
+    }
+  },
+  "created": "2026-02-12",
+  "depends_on": "PRD-003"
+}

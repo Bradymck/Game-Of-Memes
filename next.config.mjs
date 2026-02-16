@@ -6,6 +6,7 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
+<<<<<<< HEAD
   webpack: (config, { isServer }) => {
     // Handle node: protocol imports for browser
     if (!isServer) {
@@ -17,6 +18,16 @@ const nextConfig = {
         tls: false,
       };
     }
+=======
+  serverExternalPackages: ["pino", "pino-pretty", "thread-stream"],
+  turbopack: {},
+  webpack: (config) => {
+    config.resolve.fallback = {
+      ...config.resolve.fallback,
+      tap: false,
+      tape: false,
+    };
+>>>>>>> 0a786e0d6eebf726fff98f3bda559b977bfaa3c1
     return config;
   },
 }

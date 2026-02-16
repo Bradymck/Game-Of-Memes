@@ -1,28 +1,33 @@
-"use client"
+"use client";
 
-import { useRef, useMemo, Suspense } from "react"
-import { Canvas, useFrame, useLoader } from "@react-three/fiber"
-import { Text, Float, Stars } from "@react-three/drei"
-import * as THREE from "three"
-import { OBJLoader } from "three/examples/jsm/loaders/OBJLoader"
-import { FBXLoader } from "three/examples/jsm/loaders/FBXLoader"
+import { useRef, useMemo, Suspense } from "react";
+import { Canvas, useFrame } from "@react-three/fiber";
+import { Text, Float, Stars } from "@react-three/drei";
+import * as THREE from "three";
 
 // Wojak character - positioned at edges
 function Wojak({
   position,
   scale = 1,
   emotion = "neutral",
-}: { position: [number, number, number]; scale?: number; emotion?: string }) {
-  const groupRef = useRef<THREE.Group>(null)
+}: {
+  position: [number, number, number];
+  scale?: number;
+  emotion?: string;
+}) {
+  const groupRef = useRef<THREE.Group>(null);
 
   useFrame((state) => {
     if (groupRef.current) {
-      groupRef.current.rotation.y = Math.sin(state.clock.elapsedTime * 0.5) * 0.1
-      groupRef.current.position.y = position[1] + Math.sin(state.clock.elapsedTime * 0.8) * 0.1
+      groupRef.current.rotation.y =
+        Math.sin(state.clock.elapsedTime * 0.5) * 0.1;
+      groupRef.current.position.y =
+        position[1] + Math.sin(state.clock.elapsedTime * 0.8) * 0.1;
     }
-  })
+  });
 
-  const faceColor = emotion === "happy" ? "#FFE4B5" : emotion === "sad" ? "#DDD5C0" : "#FFECD2"
+  const faceColor =
+    emotion === "happy" ? "#FFE4B5" : emotion === "sad" ? "#DDD5C0" : "#FFECD2";
 
   return (
     <group ref={groupRef} position={position} scale={scale}>
@@ -41,33 +46,49 @@ function Wojak({
         <meshStandardMaterial color="#222" />
       </mesh>
       {/* Eyebrows - sad angle */}
-      <mesh position={[-0.15, 0.25, 0.42]} rotation={[0, 0, emotion === "sad" ? 0.3 : -0.2]}>
+      <mesh
+        position={[-0.15, 0.25, 0.42]}
+        rotation={[0, 0, emotion === "sad" ? 0.3 : -0.2]}
+      >
         <boxGeometry args={[0.15, 0.03, 0.02]} />
         <meshStandardMaterial color="#4A3728" />
       </mesh>
-      <mesh position={[0.15, 0.25, 0.42]} rotation={[0, 0, emotion === "sad" ? -0.3 : 0.2]}>
+      <mesh
+        position={[0.15, 0.25, 0.42]}
+        rotation={[0, 0, emotion === "sad" ? -0.3 : 0.2]}
+      >
         <boxGeometry args={[0.15, 0.03, 0.02]} />
         <meshStandardMaterial color="#4A3728" />
       </mesh>
       {/* Mouth */}
       <mesh position={[0, -0.15, 0.45]}>
-        <torusGeometry args={[0.08, 0.02, 8, 16, emotion === "sad" ? Math.PI : -Math.PI]} />
+        <torusGeometry
+          args={[0.08, 0.02, 8, 16, emotion === "sad" ? Math.PI : -Math.PI]}
+        />
         <meshStandardMaterial color="#8B4513" />
       </mesh>
     </group>
-  )
+  );
 }
 
 // Pepe the Frog
-function Pepe({ position, scale = 1 }: { position: [number, number, number]; scale?: number }) {
-  const groupRef = useRef<THREE.Group>(null)
+function Pepe({
+  position,
+  scale = 1,
+}: {
+  position: [number, number, number];
+  scale?: number;
+}) {
+  const groupRef = useRef<THREE.Group>(null);
 
   useFrame((state) => {
     if (groupRef.current) {
-      groupRef.current.rotation.z = Math.sin(state.clock.elapsedTime * 0.6) * 0.05
-      groupRef.current.position.y = position[1] + Math.cos(state.clock.elapsedTime * 1.2) * 0.08
+      groupRef.current.rotation.z =
+        Math.sin(state.clock.elapsedTime * 0.6) * 0.05;
+      groupRef.current.position.y =
+        position[1] + Math.cos(state.clock.elapsedTime * 1.2) * 0.08;
     }
-  })
+  });
 
   return (
     <group ref={groupRef} position={position} scale={scale}>
@@ -108,11 +129,19 @@ function Pepe({ position, scale = 1 }: { position: [number, number, number]; sca
       </mesh>
 
       {/* Heavy eyelids - droopy Pepe look */}
-      <mesh position={[-0.22, 0.32, 0.35]} rotation={[0.3, 0, 0.1]} scale={[1.2, 0.3, 0.5]}>
+      <mesh
+        position={[-0.22, 0.32, 0.35]}
+        rotation={[0.3, 0, 0.1]}
+        scale={[1.2, 0.3, 0.5]}
+      >
         <sphereGeometry args={[0.15, 16, 16]} />
         <meshStandardMaterial color="#4d7a3a" />
       </mesh>
-      <mesh position={[0.22, 0.32, 0.35]} rotation={[0.3, 0, -0.1]} scale={[1.2, 0.3, 0.5]}>
+      <mesh
+        position={[0.22, 0.32, 0.35]}
+        rotation={[0.3, 0, -0.1]}
+        scale={[1.2, 0.3, 0.5]}
+      >
         <sphereGeometry args={[0.15, 16, 16]} />
         <meshStandardMaterial color="#4d7a3a" />
       </mesh>
@@ -135,19 +164,27 @@ function Pepe({ position, scale = 1 }: { position: [number, number, number]; sca
         <meshStandardMaterial color="#7ab664" />
       </mesh>
     </group>
-  )
+  );
 }
 
 // Doge - Shiba Inu
-function Doge({ position, scale = 1 }: { position: [number, number, number]; scale?: number }) {
-  const groupRef = useRef<THREE.Group>(null)
+function Doge({
+  position,
+  scale = 1,
+}: {
+  position: [number, number, number];
+  scale?: number;
+}) {
+  const groupRef = useRef<THREE.Group>(null);
 
   useFrame((state) => {
     if (groupRef.current) {
-      groupRef.current.rotation.y = Math.sin(state.clock.elapsedTime * 0.7) * 0.15
-      groupRef.current.position.y = position[1] + Math.sin(state.clock.elapsedTime + 1) * 0.1
+      groupRef.current.rotation.y =
+        Math.sin(state.clock.elapsedTime * 0.7) * 0.15;
+      groupRef.current.position.y =
+        position[1] + Math.sin(state.clock.elapsedTime + 1) * 0.1;
     }
-  })
+  });
 
   return (
     <group ref={groupRef} position={position} scale={scale}>
@@ -208,11 +245,19 @@ function Doge({ position, scale = 1 }: { position: [number, number, number]; sca
       </mesh>
 
       {/* Eyebrows - raised skeptical look */}
-      <mesh position={[-0.15, 0.28, 0.38]} rotation={[0, 0, 0.2]} scale={[1, 0.4, 0.5]}>
+      <mesh
+        position={[-0.15, 0.28, 0.38]}
+        rotation={[0, 0, 0.2]}
+        scale={[1, 0.4, 0.5]}
+      >
         <sphereGeometry args={[0.08, 8, 8]} />
         <meshStandardMaterial color="#b8923e" />
       </mesh>
-      <mesh position={[0.15, 0.3, 0.38]} rotation={[0, 0, -0.3]} scale={[1, 0.4, 0.5]}>
+      <mesh
+        position={[0.15, 0.3, 0.38]}
+        rotation={[0, 0, -0.3]}
+        scale={[1, 0.4, 0.5]}
+      >
         <sphereGeometry args={[0.08, 8, 8]} />
         <meshStandardMaterial color="#b8923e" />
       </mesh>
@@ -228,11 +273,19 @@ function Doge({ position, scale = 1 }: { position: [number, number, number]; sca
       </mesh>
 
       {/* Inner ear - pink */}
-      <mesh position={[-0.3, 0.42, 0]} rotation={[0.3, 0.3, -0.3]} scale={[0.6, 0.6, 0.6]}>
+      <mesh
+        position={[-0.3, 0.42, 0]}
+        rotation={[0.3, 0.3, -0.3]}
+        scale={[0.6, 0.6, 0.6]}
+      >
         <coneGeometry args={[0.1, 0.25, 3]} />
         <meshStandardMaterial color="#e8a0a0" />
       </mesh>
-      <mesh position={[0.3, 0.42, 0]} rotation={[0.3, -0.3, 0.3]} scale={[0.6, 0.6, 0.6]}>
+      <mesh
+        position={[0.3, 0.42, 0]}
+        rotation={[0.3, -0.3, 0.3]}
+        scale={[0.6, 0.6, 0.6]}
+      >
         <coneGeometry args={[0.1, 0.25, 3]} />
         <meshStandardMaterial color="#e8a0a0" />
       </mesh>
@@ -243,18 +296,25 @@ function Doge({ position, scale = 1 }: { position: [number, number, number]; sca
         <meshStandardMaterial color="#4a3728" />
       </mesh>
     </group>
-  )
+  );
 }
 
 // Chad face
-function Chad({ position, scale = 1 }: { position: [number, number, number]; scale?: number }) {
-  const groupRef = useRef<THREE.Group>(null)
+function Chad({
+  position,
+  scale = 1,
+}: {
+  position: [number, number, number];
+  scale?: number;
+}) {
+  const groupRef = useRef<THREE.Group>(null);
 
   useFrame((state) => {
     if (groupRef.current) {
-      groupRef.current.rotation.y = Math.sin(state.clock.elapsedTime * 0.4) * 0.08
+      groupRef.current.rotation.y =
+        Math.sin(state.clock.elapsedTime * 0.4) * 0.08;
     }
-  })
+  });
 
   return (
     <group ref={groupRef} position={position} scale={scale}>
@@ -283,7 +343,7 @@ function Chad({ position, scale = 1 }: { position: [number, number, number]; sca
         <meshStandardMaterial color="#4A3728" />
       </mesh>
     </group>
-  )
+  );
 }
 
 // Floating crypto coin
@@ -291,16 +351,21 @@ function CryptoCoin({
   position,
   color,
   symbol,
-}: { position: [number, number, number]; color: string; symbol: string }) {
-  const meshRef = useRef<THREE.Mesh>(null)
-  const initialY = position[1]
+}: {
+  position: [number, number, number];
+  color: string;
+  symbol: string;
+}) {
+  const meshRef = useRef<THREE.Mesh>(null);
+  const initialY = position[1];
 
   useFrame((state) => {
     if (meshRef.current) {
-      meshRef.current.rotation.y += 0.02
-      meshRef.current.position.y = initialY + Math.sin(state.clock.elapsedTime * 2 + position[0]) * 0.15
+      meshRef.current.rotation.y += 0.02;
+      meshRef.current.position.y =
+        initialY + Math.sin(state.clock.elapsedTime * 2 + position[0]) * 0.15;
     }
-  })
+  });
 
   return (
     <Float speed={2} rotationIntensity={0.5} floatIntensity={0.5}>
@@ -320,19 +385,20 @@ function CryptoCoin({
         </Text>
       </group>
     </Float>
-  )
+  );
 }
 
 // Rocket ship (to the moon!)
 function Rocket({ position }: { position: [number, number, number] }) {
-  const groupRef = useRef<THREE.Group>(null)
+  const groupRef = useRef<THREE.Group>(null);
 
   useFrame((state) => {
     if (groupRef.current) {
-      groupRef.current.position.y = position[1] + Math.sin(state.clock.elapsedTime * 1.5) * 0.3
-      groupRef.current.rotation.z = Math.sin(state.clock.elapsedTime * 2) * 0.1
+      groupRef.current.position.y =
+        position[1] + Math.sin(state.clock.elapsedTime * 1.5) * 0.3;
+      groupRef.current.rotation.z = Math.sin(state.clock.elapsedTime * 2) * 0.1;
     }
-  })
+  });
 
   return (
     <group ref={groupRef} position={position} rotation={[0, 0, 0.3]}>
@@ -358,10 +424,14 @@ function Rocket({ position }: { position: [number, number, number] }) {
       {/* Flame */}
       <mesh position={[0, -0.45, 0]}>
         <coneGeometry args={[0.1, 0.3, 16]} />
-        <meshStandardMaterial color="#FF9800" emissive="#FF5722" emissiveIntensity={2} />
+        <meshStandardMaterial
+          color="#FF9800"
+          emissive="#FF5722"
+          emissiveIntensity={2}
+        />
       </mesh>
     </group>
-  )
+  );
 }
 
 // Floating meme text
@@ -369,14 +439,20 @@ function MemeText({
   position,
   text,
   color = "#FFD700",
-}: { position: [number, number, number]; text: string; color?: string }) {
-  const textRef = useRef<THREE.Mesh>(null)
+}: {
+  position: [number, number, number];
+  text: string;
+  color?: string;
+}) {
+  const textRef = useRef<THREE.Mesh>(null);
 
   useFrame((state) => {
     if (textRef.current) {
-      textRef.current.position.y = position[1] + Math.sin(state.clock.elapsedTime * 1.5 + position[0]) * 0.1
+      textRef.current.position.y =
+        position[1] +
+        Math.sin(state.clock.elapsedTime * 1.5 + position[0]) * 0.1;
     }
-  })
+  });
 
   return (
     <Float speed={1.5} rotationIntensity={0.2} floatIntensity={0.3}>
@@ -393,67 +469,92 @@ function MemeText({
         {text}
       </Text>
     </Float>
-  )
+  );
 }
 
 // Chart line going up
 function MoonChart({ position }: { position: [number, number, number] }) {
   const points = useMemo(() => {
-    const pts = []
+    const pts = [];
     for (let i = 0; i < 20; i++) {
-      pts.push(new THREE.Vector3(i * 0.1 - 1, Math.pow(i / 10, 2) * 0.5 + Math.random() * 0.1, 0))
+      pts.push(
+        new THREE.Vector3(
+          i * 0.1 - 1,
+          Math.pow(i / 10, 2) * 0.5 + Math.random() * 0.1,
+          0,
+        ),
+      );
     }
-    return pts
-  }, [])
+    return pts;
+  }, []);
 
-  const lineGeometry = useMemo(() => new THREE.BufferGeometry().setFromPoints(points), [points])
+  const lineGeometry = useMemo(
+    () => new THREE.BufferGeometry().setFromPoints(points),
+    [points],
+  );
 
   return (
     <group position={position}>
-      <line geometry={lineGeometry}>
-        <lineBasicMaterial color="#00FF00" linewidth={3} />
-      </line>
+      <primitive
+        object={
+          new THREE.Line(
+            lineGeometry,
+            new THREE.LineBasicMaterial({ color: "#00FF00" }),
+          )
+        }
+      />
     </group>
-  )
+  );
 }
 
 // Diamond hands
 function DiamondHands({ position }: { position: [number, number, number] }) {
-  const groupRef = useRef<THREE.Group>(null)
+  const groupRef = useRef<THREE.Group>(null);
 
   useFrame((state) => {
     if (groupRef.current) {
-      groupRef.current.rotation.y = state.clock.elapsedTime * 0.5
-      groupRef.current.position.y = position[1] + Math.sin(state.clock.elapsedTime * 2) * 0.1
+      groupRef.current.rotation.y = state.clock.elapsedTime * 0.5;
+      groupRef.current.position.y =
+        position[1] + Math.sin(state.clock.elapsedTime * 2) * 0.1;
     }
-  })
+  });
 
   return (
     <group ref={groupRef} position={position}>
       <mesh>
         <octahedronGeometry args={[0.25]} />
-        <meshStandardMaterial color="#00BFFF" metalness={0.9} roughness={0.1} transparent opacity={0.8} />
+        <meshStandardMaterial
+          color="#00BFFF"
+          metalness={0.9}
+          roughness={0.1}
+          transparent
+          opacity={0.8}
+        />
       </mesh>
     </group>
-  )
+  );
 }
 
 // Moon
 function Moon({ position }: { position: [number, number, number] }) {
-  const moonRef = useRef<THREE.Mesh>(null)
+  const moonRef = useRef<THREE.Mesh>(null);
 
   useFrame((state) => {
     if (moonRef.current) {
-      moonRef.current.rotation.y += 0.002
+      moonRef.current.rotation.y += 0.002;
     }
-  })
+  });
 
   return (
     <mesh ref={moonRef} position={position}>
       <sphereGeometry args={[0.8, 32, 32]} />
-      <meshStandardMaterial color="#F5F5DC" emissive="#FFFACD" emissiveIntensity={0.3} />
+      <meshStandardMaterial
+        color="#F5F5DC"
+        emissive="#FFFACD"
+        emissiveIntensity={0.3}
+      />
     </mesh>
-  )
+  );
 }
 
 // Main scene component
@@ -467,7 +568,15 @@ function Scene() {
       <spotLight position={[0, 10, 0]} intensity={0.8} color="#fff" />
 
       {/* Background stars */}
-      <Stars radius={100} depth={50} count={5000} factor={4} saturation={0} fade speed={1} />
+      <Stars
+        radius={100}
+        depth={50}
+        count={5000}
+        factor={4}
+        saturation={0}
+        fade
+        speed={1}
+      />
 
       {/* Moon in the background - top right corner */}
       <Moon position={[7, 5, -10]} />
@@ -508,7 +617,7 @@ function Scene() {
       <DiamondHands position={[3, 8, -3]} />
       <DiamondHands position={[-3, -8, -3]} />
     </>
-  )
+  );
 }
 
 export default function MemeBackground() {
@@ -517,10 +626,13 @@ export default function MemeBackground() {
       <Canvas
         camera={{ position: [0, 0, 8], fov: 60 }}
         gl={{ antialias: true, alpha: true }}
-        style={{ background: "linear-gradient(180deg, #0a0a1a 0%, #1a0a2e 50%, #0a1a0a 100%)" }}
+        style={{
+          background:
+            "linear-gradient(180deg, #0a0a1a 0%, #1a0a2e 50%, #0a1a0a 100%)",
+        }}
       >
         <Scene />
       </Canvas>
     </div>
-  )
+  );
 }

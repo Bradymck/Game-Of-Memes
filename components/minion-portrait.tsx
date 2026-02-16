@@ -1,19 +1,19 @@
-"use client"
+"use client";
 
-import { useState, useRef, useEffect } from "react"
-import { cn } from "@/lib/utils"
-import { AttackEffect, VTTDamageNumber } from "@/components/attack-effects"
-import type { MemeCardData } from "@/lib/game-context"
+import { useState, useRef, useEffect } from "react";
+import { cn } from "@/lib/utils";
+import { AttackEffect, VTTDamageNumber } from "@/components/attack-effects";
+import type { MemeCardData } from "@/lib/game-context";
 
 interface MinionPortraitProps {
-  card: MemeCardData
-  isSelected?: boolean
-  isTargetable?: boolean
-  canAttack?: boolean
-  onClick?: () => void
-  onDragAttack?: (targetId: string | null) => void // Called when dragged to a target
-  damageTaken?: number | null
-  isDying?: boolean
+  card: MemeCardData;
+  isSelected?: boolean;
+  isTargetable?: boolean;
+  canAttack?: boolean;
+  onClick?: () => void;
+  onDragAttack?: (targetId: string | null) => void; // Called when dragged to a target
+  damageTaken?: number | null;
+  isDying?: boolean;
 }
 
 const rarityGlow = {
@@ -21,14 +21,14 @@ const rarityGlow = {
   rare: "shadow-blue-400/40",
   epic: "shadow-purple-400/50",
   legendary: "shadow-amber-400/60",
-}
+};
 
 const rarityBorder = {
   common: "border-stone-500",
   rare: "border-blue-400",
   epic: "border-purple-400",
   legendary: "border-amber-400",
-}
+};
 
 export function MinionPortrait({
   card,
@@ -51,7 +51,11 @@ export function MinionPortrait({
   const cardRef = useRef<HTMLDivElement>(null);
 
   // Determine attack type based on rarity (for when THIS card attacks others)
-  const attackType = card.ability ? "ability" : (card.rarity === "common" || card.rarity === "rare" ? "melee" : "spell");
+  const attackType = card.ability
+    ? "ability"
+    : card.rarity === "common" || card.rarity === "rare"
+      ? "melee"
+      : "spell";
 
   // Show damage numbers and impact effect when THIS card is damaged
   useEffect(() => {
@@ -73,9 +77,16 @@ export function MinionPortrait({
       setDragOffset({ x: deltaX, y: deltaY });
 
       // Clear all previous highlights first
-      document.querySelectorAll('[data-minion-id], [data-hero-target]').forEach(el => {
-        el.classList.remove('ring-4', 'ring-red-500', 'ring-opacity-80', 'animate-pulse');
-      });
+      document
+        .querySelectorAll("[data-minion-id], [data-hero-target]")
+        .forEach((el) => {
+          el.classList.remove(
+            "ring-4",
+            "ring-red-500",
+            "ring-opacity-80",
+            "animate-pulse",
+          );
+        });
 
       // Get the card's current position (including drag offset)
       if (!cardRef.current) return;
@@ -85,20 +96,30 @@ export function MinionPortrait({
 
       // Check if the CARD CENTER is hovering over a valid target
       const target = document.elementFromPoint(cardCenterX, cardCenterY);
-      const targetCard = target?.closest('[data-minion-id]');
-      const targetHero = target?.closest('[data-hero-target]');
+      const targetCard = target?.closest("[data-minion-id]");
+      const targetHero = target?.closest("[data-hero-target]");
 
       // Only highlight the SPECIFIC card/hero we're hovering over (not this card)
       if (targetCard) {
-        const minionId = targetCard.getAttribute('data-minion-id');
+        const minionId = targetCard.getAttribute("data-minion-id");
         if (minionId !== card.id) {
-          targetCard.classList.add('ring-4', 'ring-red-500', 'ring-opacity-80', 'animate-pulse');
+          targetCard.classList.add(
+            "ring-4",
+            "ring-red-500",
+            "ring-opacity-80",
+            "animate-pulse",
+          );
           setIsOverTarget(true);
         } else {
           setIsOverTarget(false);
         }
       } else if (targetHero) {
-        targetHero.classList.add('ring-4', 'ring-red-500', 'ring-opacity-80', 'animate-pulse');
+        targetHero.classList.add(
+          "ring-4",
+          "ring-red-500",
+          "ring-opacity-80",
+          "animate-pulse",
+        );
         setIsOverTarget(true);
       } else {
         setIsOverTarget(false);
@@ -107,9 +128,16 @@ export function MinionPortrait({
 
     const handleMouseUp = () => {
       // Clear all highlights
-      document.querySelectorAll('[data-minion-id], [data-hero-target]').forEach(el => {
-        el.classList.remove('ring-4', 'ring-red-500', 'ring-opacity-80', 'animate-pulse');
-      });
+      document
+        .querySelectorAll("[data-minion-id], [data-hero-target]")
+        .forEach((el) => {
+          el.classList.remove(
+            "ring-4",
+            "ring-red-500",
+            "ring-opacity-80",
+            "animate-pulse",
+          );
+        });
 
       // Get the card's current position for drop detection
       if (!cardRef.current) return;
@@ -119,8 +147,8 @@ export function MinionPortrait({
 
       // Check if the CARD CENTER is over an enemy target
       const target = document.elementFromPoint(cardCenterX, cardCenterY);
-      const targetCard = target?.closest('[data-minion-id]');
-      const targetHero = target?.closest('[data-hero-target]');
+      const targetCard = target?.closest("[data-minion-id]");
+      const targetHero = target?.closest("[data-hero-target]");
 
       // Only attack if canAttack is true!
       if (canAttack && onDragAttack) {
@@ -137,13 +165,16 @@ export function MinionPortrait({
           }, 600);
 
           // Target shake animation
-          targetElement.classList.add('animate-shake');
-          setTimeout(() => targetElement.classList.remove('animate-shake'), 300);
+          targetElement.classList.add("animate-shake");
+          setTimeout(
+            () => targetElement.classList.remove("animate-shake"),
+            300,
+          );
 
           // Execute attack after animation starts
           setTimeout(() => {
             if (targetCard) {
-              const targetId = targetCard.getAttribute('data-minion-id');
+              const targetId = targetCard.getAttribute("data-minion-id");
               onDragAttack(targetId);
             } else if (targetHero) {
               onDragAttack(null); // null = attack hero
@@ -160,11 +191,11 @@ export function MinionPortrait({
       setIsOverTarget(false);
     };
 
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
     return () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
     };
   }, [isDragging, onDragAttack, card.id]);
 
@@ -187,17 +218,17 @@ export function MinionPortrait({
       if (distance > 5) {
         // Actual drag detected
         setIsDragging(true);
-        document.removeEventListener('mousemove', handleInitialMove);
+        document.removeEventListener("mousemove", handleInitialMove);
       }
     };
 
     const handleInitialUp = () => {
-      document.removeEventListener('mousemove', handleInitialMove);
-      document.removeEventListener('mouseup', handleInitialUp);
+      document.removeEventListener("mousemove", handleInitialMove);
+      document.removeEventListener("mouseup", handleInitialUp);
     };
 
-    document.addEventListener('mousemove', handleInitialMove);
-    document.addEventListener('mouseup', handleInitialUp);
+    document.addEventListener("mousemove", handleInitialMove);
+    document.addEventListener("mouseup", handleInitialUp);
   };
 
   const handleClick = (e: React.MouseEvent) => {
@@ -220,9 +251,11 @@ export function MinionPortrait({
         isDying && "animate-death-dissolve pointer-events-none",
       )}
       style={{
-        transform: isDragging ? `translate(${dragOffset.x}px, ${dragOffset.y}px)` : undefined,
-        transition: isDragging ? 'none' : 'transform 0.2s',
-        zIndex: isDragging ? 100 : 'auto',
+        transform: isDragging
+          ? `translate(${dragOffset.x}px, ${dragOffset.y}px)`
+          : undefined,
+        transition: isDragging ? "none" : "transform 0.2s",
+        zIndex: isDragging ? 100 : "auto",
       }}
       onClick={handleClick}
       onMouseDown={handleMouseDown}
@@ -231,12 +264,14 @@ export function MinionPortrait({
       {/* Drag indicator arrow */}
       {isDragging && (
         <div className="absolute -top-12 left-1/2 -translate-x-1/2 pointer-events-none">
-          <div className={cn(
-            "px-3 py-1 rounded-full text-xs font-bold",
-            isOverTarget
-              ? "bg-green-500 text-white"
-              : "bg-amber-500 text-white animate-pulse"
-          )}>
+          <div
+            className={cn(
+              "px-3 py-1 rounded-full text-xs font-bold",
+              isOverTarget
+                ? "bg-green-500 text-white"
+                : "bg-amber-500 text-white animate-pulse",
+            )}
+          >
             {isOverTarget ? "Release to attack!" : "Drag to target"}
           </div>
         </div>
@@ -264,16 +299,26 @@ export function MinionPortrait({
         <div className="absolute inset-0.5 rounded-lg border border-amber-500/20" />
 
         {/* Portrait Image */}
-        {card.image && card.image !== '/placeholder.jpg' ? (
-          <img src={card.image} alt={card.name} className="w-full h-full object-cover" />
+        {card.image && card.image !== "/placeholder.jpg" ? (
+          <img
+            src={card.image}
+            alt={card.name}
+            className="w-full h-full object-cover"
+          />
         ) : (
           // Mystical ghost card fallback
           <div className="w-full h-full bg-gradient-to-br from-purple-900/40 via-indigo-900/30 to-violet-950/40 relative overflow-hidden">
             {/* Swirly ethereal effect */}
             <div className="absolute inset-0 opacity-30">
               <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-32 h-32 rounded-full bg-purple-500/20 blur-2xl animate-pulse" />
-              <div className="absolute top-1/3 left-1/3 w-24 h-24 rounded-full bg-indigo-400/15 blur-xl animate-pulse" style={{ animationDelay: '0.5s' }} />
-              <div className="absolute bottom-1/3 right-1/3 w-20 h-20 rounded-full bg-violet-500/15 blur-xl animate-pulse" style={{ animationDelay: '1s' }} />
+              <div
+                className="absolute top-1/3 left-1/3 w-24 h-24 rounded-full bg-indigo-400/15 blur-xl animate-pulse"
+                style={{ animationDelay: "0.5s" }}
+              />
+              <div
+                className="absolute bottom-1/3 right-1/3 w-20 h-20 rounded-full bg-violet-500/15 blur-xl animate-pulse"
+                style={{ animationDelay: "1s" }}
+              />
             </div>
             {/* Ghost silhouette */}
             <div className="absolute inset-0 flex items-center justify-center">
@@ -285,7 +330,9 @@ export function MinionPortrait({
         )}
 
         {/* Legendary shine overlay */}
-        {card.rarity === "legendary" && <div className="absolute inset-0 legendary-shine pointer-events-none" />}
+        {card.rarity === "legendary" && (
+          <div className="absolute inset-0 legendary-shine pointer-events-none" />
+        )}
       </div>
 
       {/* Attack Stat (bottom left) */}
@@ -297,6 +344,30 @@ export function MinionPortrait({
       <div className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-gradient-to-b from-red-500 to-red-700 border-2 border-red-400 flex items-center justify-center shadow-md">
         <span className="text-white font-bold text-sm">{card.health}</span>
       </div>
+
+      {/* Market Data Badge (top right) - only for player cards with market data */}
+      {card.marketData && (
+        <div className="absolute -top-1 -right-1 px-1.5 py-0.5 rounded-md bg-black/80 border border-green-500/60 flex items-center gap-1 shadow-lg text-[8px] font-bold">
+          <span className="text-green-400">
+            $
+            {card.marketData.price >= 1
+              ? card.marketData.price.toFixed(2)
+              : card.marketData.price >= 0.01
+                ? card.marketData.price.toFixed(4)
+                : card.marketData.price.toFixed(6)}
+          </span>
+          <span
+            className={
+              card.marketData.priceChange24h >= 0
+                ? "text-green-400"
+                : "text-red-400"
+            }
+          >
+            {card.marketData.priceChange24h >= 0 ? "↑" : "↓"}
+            {Math.abs(card.marketData.priceChange24h).toFixed(1)}%
+          </span>
+        </div>
+      )}
 
       {/* Attack Sprite when THIS card attacks */}
       {showAttackSprite && (
@@ -325,5 +396,5 @@ export function MinionPortrait({
         />
       )}
     </div>
-  )
+  );
 }

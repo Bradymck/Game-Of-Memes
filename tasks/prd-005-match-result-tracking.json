@@ -1,0 +1,80 @@
+{
+  "id": "PRD-005",
+  "title": "Match Result Tracking via Supabase",
+  "status": "completed",
+  "completedAt": "2026-02-12T05:15:00Z",
+  "agent": "pixel",
+  "priority": "P1",
+  "description": "Add detailed match result tracking to Supabase alongside the existing on-chain SoulTokenV2 recording. Currently the game-over-screen.tsx already records wins/losses on-chain (SoulTokenV2 at 0xE391939D6061697f72D197792d2360c81204B7fe), but only stores aggregate stats. This PRD adds per-match detail storage (stats, duration, difficulty) to Supabase for leaderboards and card balance analysis. The Supabase instance is shared with AquaPrime and already configured in .env. NOTE: The Supabase table must be created manually — the agent should create the SQL migration file but cannot run it.",
+  "acceptance_criteria": [
+    "npx tsc --noEmit exits with 0 errors",
+    "npm test passes with 78+ tests (existing 74 + new match tracking tests)",
+    "npm run build succeeds with no errors",
+    "lib/supabase.ts exports client and admin client",
+    "app/api/matches/route.ts handles POST (record) and GET (history)",
+    "game-over-screen.tsx calls /api/matches after on-chain recording",
+    "Match start time is tracked in game-context.tsx",
+    "Graceful fallback if Supabase call fails (game still works)"
+  ],
+  "implementation_guide": {
+    "step_1": {
+      "description": "Install @supabase/supabase-js dependency",
+      "action": "bash",
+      "command": "cd ~/Documents/Github/Game_Of_Memes && npm install @supabase/supabase-js"
+    },
+    "step_2": {
+      "description": "Create Supabase client utility",
+      "file": "lib/supabase.ts",
+      "action": "create",
+      "details": "Export two clients: (1) supabase — browser client using NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY from env. (2) supabaseAdmin — server client using SUPABASE_SERVICE_ROLE_KEY with persistSession: false. Both env vars already exist in .env."
+    },
+    "step_3": {
+      "description": "Create SQL migration file (documentation only — cannot be applied by agent)",
+      "file": "supabase/migrations/20260212_match_history.sql",
+      "action": "create",
+      "details": "CREATE TABLE game_of_memes_matches with columns: id (UUID PK), player_address (TEXT NOT NULL), player_won (BOOLEAN), player_health (INT), opponent_health (INT), cards_played (INT), damage_dealt (INT), turn_count (INT), difficulty (TEXT), tx_hash (TEXT nullable), duration_seconds (INT), created_at (TIMESTAMPTZ DEFAULT NOW()). Add indexes on player_address and created_at. Enable RLS with public SELECT policy and service-role INSERT policy."
+    },
+    "step_4": {
+      "description": "Create match recording API route",
+      "file": "app/api/matches/route.ts",
+      "action": "create",
+      "details": "POST handler: Accept JSON body with playerAddress, playerWon, playerHealth, opponentHealth, cardsPlayed, damageDealt, turnCount, difficulty, txHash, durationSeconds. Insert into game_of_memes_matches using supabaseAdmin. Return { success: true, matchId }. Wrap in try/catch — return 500 on error but never crash. GET handler: Accept ?player=address query param. Fetch last 50 matches for that player ordered by created_at DESC. Return { matches: [...] }."
+    },
+    "step_5": {
+      "description": "Track match start time in game context",
+      "file": "lib/game-context.tsx",
+      "action": "modify",
+      "details": "Add matchStartTime: number to GameState interface (line ~50). Initialize to Date.now() when game starts (in the initial state and in resetGame). Expose it in the context value. This allows calculating match duration at game end."
+    },
+    "step_6": {
+      "description": "Record match to Supabase from game-over-screen",
+      "file": "components/game-over-screen.tsx",
+      "action": "modify",
+      "details": "After the existing on-chain recording (lines 44-68), add a fetch call to POST /api/matches with all available stats. Use the txHash from the on-chain recording if available. Calculate durationSeconds from matchStartTime. Wrap in try/catch — if Supabase fails, log the error but don't break the game over flow. The existing on-chain recording must still work even if Supabase is down."
+    },
+    "step_7": {
+      "description": "Write tests for match tracking",
+      "file": "lib/__tests__/matchTracking.test.ts",
+      "action": "create",
+      "details": "Test: (1) Match data object has correct shape. (2) Duration calculation works (end - start in seconds). (3) Missing fields get defaults. (4) Difficulty values are valid strings. At least 4 tests. Mock fetch for API tests."
+    }
+  },
+  "files_to_create": [
+    "lib/supabase.ts",
+    "app/api/matches/route.ts",
+    "supabase/migrations/20260212_match_history.sql",
+    "lib/__tests__/matchTracking.test.ts"
+  ],
+  "files_to_modify": [
+    "lib/game-context.tsx",
+    "components/game-over-screen.tsx",
+    "package.json"
+  ],
+  "env_vars": {
+    "NEXT_PUBLIC_SUPABASE_URL": "Already in .env",
+    "NEXT_PUBLIC_SUPABASE_ANON_KEY": "Already in .env",
+    "SUPABASE_SERVICE_ROLE_KEY": "Already in .env"
+  },
+  "created": "2026-02-12",
+  "depends_on": "PRD-004"
+}

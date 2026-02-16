@@ -1,31 +1,48 @@
-import { PackOpeningCeremony } from '@/components/pack-opening'
+import { PackOpeningCeremony } from "@/components/pack-opening";
 
 interface DraftPageProps {
-  params: Promise<{ packId: string }>
+  params: Promise<{ packId: string }>;
+  searchParams: Promise<{ image?: string; name?: string }>;
 }
 
-export default async function DraftPage({ params }: DraftPageProps) {
-  const { packId } = await params
+function getPackCount(packId: string): number {
+  const parts = packId.split("-");
+  if (parts.length >= 2) {
+    const tokenIds = decodeURIComponent(parts[1]).split(",");
+    return tokenIds.length;
+  }
+  return 1;
+}
 
-  // TODO: Fetch pack metadata from API
-  // const packData = await fetch(`/api/pack/${packId}`).then(r => r.json())
-  
+export default async function DraftPage({
+  params,
+  searchParams,
+}: DraftPageProps) {
+  const { packId } = await params;
+  const { image, name } = await searchParams;
+
+  const packCount = getPackCount(packId);
+  const packName = name || `${packCount} Pack${packCount !== 1 ? "s" : ""}`;
+
   return (
     <main className="min-h-screen bg-black">
-      <PackOpeningCeremony 
+      <PackOpeningCeremony
         packId={packId}
-        packName={`Pack #${packId}`}
+        packName={packName}
+        packImage={image}
       />
     </main>
-  )
+  );
 }
 
-// Generate metadata for the page
-export async function generateMetadata({ params }: DraftPageProps) {
-  const { packId } = await params
-  
+export async function generateMetadata({
+  params,
+  searchParams,
+}: DraftPageProps) {
+  const { name } = await searchParams;
+
   return {
-    title: `Opening Pack #${packId} | Game of Memes`,
-    description: 'Watch the pack opening ceremony and reveal your cards!',
-  }
+    title: `Opening ${name || "Packs"} | Game of Memes`,
+    description: "Watch the pack opening ceremony and reveal your cards!",
+  };
 }
