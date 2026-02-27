@@ -1,14 +1,10 @@
 {
-  "name": "my-v0-project",
+  "name": "game-of-memes",
   "version": "0.1.0",
-  "private": true,
+  "private": false,
   "scripts": {
     "build": "next build --webpack",
-<<<<<<< HEAD
     "dev": "next dev --turbopack",
-=======
-    "dev": "next dev",
->>>>>>> 0a786e0d6eebf726fff98f3bda559b977bfaa3c1
     "lint": "eslint .",
     "start": "next start",
     "test": "vitest run",

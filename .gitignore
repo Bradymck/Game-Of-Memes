@@ -41,3 +41,16 @@ public/models/Doge.obj
 public/models/Wojak.fbx
 .env.local
 .env
+
+# Agent/internal files
+.ralph_session
+.ralph_session_history
+.call_count
+.circuit_breaker_history
+.circuit_breaker_state
+.exit_signals
+.last_reset
+@AGENT.md
+@fix_plan.md
+PROMPT.md
+logs/
