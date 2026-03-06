@@ -1,50 +1,69 @@
 "use client";
 
 <<<<<<< HEAD
-import { createContext, useContext, useState, useCallback, useEffect, useRef, type ReactNode } from "react"
-import { useSearchParams } from "next/navigation"
-import { useVibeMarketCards } from "@/hooks/useVibeMarketCards"
-import { logGameAction } from "@/lib/xmtp"
-import { usePrivy } from "@privy-io/react-auth"
+import {
+  createContext,
+  useContext,
+  useState,
+  useCallback,
+  useEffect,
+  useRef,
+  type ReactNode,
+} from "react";
+import { useVibeMarketCards } from "@/hooks/useVibeMarketCards";
+import { logGameAction } from "@/lib/xmtp";
+import { usePrivy } from "@privy-io/react-auth";
+import { getAIActions, type Difficulty } from "@/lib/aiOpponent";
 
 export interface MemeCardData {
-  id: string
-  name: string
-  image: string
-  rarity: "common" | "rare" | "epic" | "legendary" | "mythic"
-  attack: number
-  health: number
-  mana: number
-  ticker: string
-  ability?: string
-  canAttack?: boolean
+  id: string;
+  name: string;
+  image: string;
+  rarity: "common" | "rare" | "epic" | "legendary";
+  attack: number;
+  health: number;
+  mana: number;
+  ticker: string;
+  ability?: string;
+  canAttack?: boolean;
+  marketData?: {
+    price: number;
+    priceChange24h: number;
+    marketCap: number;
+  };
 }
 
 interface GameState {
-  playerHand: MemeCardData[]
-  playerField: MemeCardData[]
-  playerDeck: MemeCardData[]
-  playerGraveyard: MemeCardData[]
-  opponentHand: MemeCardData[]
-  opponentField: MemeCardData[]
-  opponentDeck: MemeCardData[]
-  opponentGraveyard: MemeCardData[]
-  playerMana: number
-  maxPlayerMana: number
-  opponentMana: number
-  maxOpponentMana: number
-  playerHealth: number
-  opponentHealth: number
-  selectedCard: string | null
-  selectedAttacker: string | null
-  isPlayerTurn: boolean
-  turnNumber: number
-  gameOver: boolean
-  playerWon: boolean | null
-  cardsPlayed: number
-  damageDealt: number
-  lastDamage: { targetId: string | null; amount: number; timestamp: number } | null
-  dyingMinions: string[]
+  playerHand: MemeCardData[];
+  playerField: MemeCardData[];
+  playerDeck: MemeCardData[];
+  playerGraveyard: MemeCardData[];
+  opponentHand: MemeCardData[];
+  opponentField: MemeCardData[];
+  opponentDeck: MemeCardData[];
+  opponentGraveyard: MemeCardData[];
+  playerMana: number;
+  maxPlayerMana: number;
+  opponentMana: number;
+  maxOpponentMana: number;
+  playerHealth: number;
+  opponentHealth: number;
+  selectedCard: string | null;
+  selectedAttacker: string | null;
+  isPlayerTurn: boolean;
+  turnNumber: number;
+  gameOver: boolean;
+  playerWon: boolean | null;
+  cardsPlayed: number;
+  damageDealt: number;
+  lastDamage: {
+    targetId: string | null;
+    amount: number;
+    timestamp: number;
+  } | null;
+  dyingMinions: string[];
+  difficulty: Difficulty;
+  matchStartTime: number;
 =======
 import {
   createContext,

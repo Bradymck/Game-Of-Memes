@@ -405,21 +405,14 @@ export function GameBoard() {
                 damageTaken={lastDamage?.targetId === 'player-hero' ? lastDamage.amount : null}
               />
 =======
-              <div data-testid="player-health">
-                <div data-testid="player-mana">
-                  <HeroPortrait
-                    health={playerHealth}
-                    mana={playerMana}
-                    maxMana={maxPlayerMana}
-                    isPlayer
-                    image={
-                      user?.wallet?.address
-                        ? `https://metadata.ens.domains/mainnet/avatar/${user.wallet.address.toLowerCase()}`
-                        : undefined
-                    }
-                  />
-                </div>
-              </div>
+              <HeroPortrait
+                health={playerHealth}
+                mana={playerMana}
+                maxMana={maxPlayerMana}
+                isPlayer
+                image={user?.wallet?.address ? `https://metadata.ens.domains/mainnet/avatar/${user.wallet.address.toLowerCase()}` : undefined}
+                damageTaken={lastDamage?.targetId === 'player-hero' ? lastDamage.amount : null}
+              />
 >>>>>>> 0a786e0d6eebf726fff98f3bda559b977bfaa3c1
             </div>
           </div>
