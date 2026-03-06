@@ -345,63 +345,12 @@ export function usePythVRF({
         const results = await Promise.allSettled(
           unrevealedTokenIds.map(async (tokenId) => {
             try {
-<<<<<<< HEAD
-              const rarityInfo = await contract.getTokenRarity(tokenId)
-              const rarity = Number(rarityInfo.rarity)
-
-              // Rarity 0 means not yet revealed
-              if (rarity === 0) {
-                return null
-              }
-
-              // VRF fulfilled! Fetch metadata
-              const tokenUri = await contract.tokenURI(tokenId)
-              const httpUri = ipfsToHttp(tokenUri)
-              console.log(`📄 Fetching metadata for ${tokenId}:`, httpUri)
-
-              const metaResponse = await fetch(httpUri)
-              const metadata = await metaResponse.json()
-              console.log(`📦 Metadata for ${tokenId}:`, metadata)
-
-              // Get image - try to get the opened card image
-              let imageUrl = metadata.image || '/placeholder.jpg'
-              imageUrl = ipfsToHttp(imageUrl)
-              console.log(`🖼️ Image URL for ${tokenId}:`, imageUrl)
-
-              // Calculate stats based on rarity
-              const cardRarity = rarityMap[rarity] || 'common'
-              const rarityStats: Record<string, { attack: number; health: number; mana: number }> = {
-                common: { attack: 2, health: 2, mana: 2 },
-                rare: { attack: 3, health: 4, mana: 3 },
-                epic: { attack: 5, health: 5, mana: 4 },
-                legendary: { attack: 7, health: 6, mana: 5 },
-                mythic: { attack: 8, health: 8, mana: 6 },
-              }
-              const stats = rarityStats[cardRarity] || rarityStats.common
-
-              return {
-                tokenId,
-                card: {
-                  id: `${parsed.contractAddress}-${tokenId}`,
-                  name: metadata.name || `Card #${tokenId}`,
-                  image: imageUrl,
-                  ticker: metadata.attributes?.find((a: any) => a.trait_type === 'Ticker')?.value || '',
-                  rarity: cardRarity,
-                  ...stats,
-                  isRevealed: false,
-                } as PackCard
-              }
-            } catch (e) {
-              // VRF not fulfilled yet or error
-              return null
-=======
               const rarityInfo = await contract.getTokenRarity(tokenId);
               const rarity = Number(rarityInfo.rarity);
               if (rarity === 0) return null;
               return { tokenId, rarity };
             } catch {
               return null;
->>>>>>> 0a786e0d6eebf726fff98f3bda559b977bfaa3c1
             }
           }),
         );
