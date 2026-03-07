@@ -59,20 +59,26 @@ class AquaPrimeFadingCapability(MatchingCapability):
     player_name: str = ""
     wallet_address: str = ""
 
+    #{{register_capability}}
+
     @classmethod
     def register_capability(cls) -> "MatchingCapability":
         return cls(
             unique_name="aquaprime_the_fading",
             matching_hotwords=[
                 "play aquaprime", "play the fading", "start aquaprime",
-                "aquaprime game", "play a game", "voice rpg", "airship game",
+                "aquaprime game", "play a game", "play the game",
+                "voice rpg", "airship game",
             ],
         )
 
     def call(self, worker: AgentWorker):
         self.worker = worker
         self.capability_worker = CapabilityWorker(self.worker)
-        self.device_id = getattr(self.worker, "device_id", "unknown-device")
+        try:
+            self.device_id = self.worker.device_id
+        except Exception:
+            self.device_id = "unknown-device"
         self.worker.session_tasks.create(self.run())
 
     def api_post(self, path: str, body: dict) -> dict | None:
