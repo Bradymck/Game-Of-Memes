@@ -2,10 +2,10 @@ import { CdpClient } from '@coinbase/cdp-sdk';
 import { encodeFunctionData } from 'viem';
 
 /**
- * CDP AgentKit Wallet Integration
+ * CDP Embedded Wallet Integration
  *
  * Server-side wallet management for voice players via Coinbase Developer Platform.
- * Each voice player gets an MPC agent wallet with gas-free transactions on Base.
+ * Each player gets an EOA + Smart Account (ERC-4337) for gas-free transactions on Base.
  *
  * Contracts:
  * - Soul Token (SoulTokenV2): 0xE391939D6061697f72D197792d2360c81204B7fe
@@ -20,15 +20,15 @@ const SOUL_ABI = [
     name: 'recordGameLoss',
     type: 'function' as const,
     stateMutability: 'nonpayable' as const,
-    inputs: [],
-    outputs: [],
+    inputs: [] as const,
+    outputs: [] as const,
   },
   {
     name: 'recordGameWin',
     type: 'function' as const,
     stateMutability: 'nonpayable' as const,
-    inputs: [],
-    outputs: [],
+    inputs: [] as const,
+    outputs: [] as const,
   },
   {
     name: 'getGameStats',
@@ -73,25 +73,30 @@ function getCdpClient(): CdpClient {
 }
 
 /**
- * Create a new CDP agent wallet for a voice player
+ * Create a new CDP embedded wallet for a voice player.
+ * Returns an EOA owner and a Smart Account (ERC-4337) for gas-free transactions.
+ * The smart account address is the player's on-chain identity.
  */
 export async function createPlayerWallet(): Promise<{
   address: string;
   accountId: string;
 }> {
   const cdp = getCdpClient();
-  const account = await cdp.evm.createAccount();
+  const owner = await cdp.evm.createAccount();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const smart = await cdp.evm.createSmartAccount({ owner: owner as any });
   return {
-    address: account.address,
-    accountId: account.address,
+    address: smart.address,
+    accountId: owner.address,
   };
 }
 
 /**
- * Record a game result on the Soul Token contract
+ * Record a game result on the Soul Token contract via sponsored UserOperation.
+ * Uses the player's smart account for gas-free execution.
  */
 export async function recordGameResult(
-  walletAddress: string,
+  smartAccountAddress: string,
   won: boolean,
 ): Promise<string> {
   const cdp = getCdpClient();
@@ -102,16 +107,21 @@ export async function recordGameResult(
     functionName: fnName,
   });
 
-  const tx = await cdp.evm.sendTransaction({
-    address: walletAddress as `0x${string}`,
-    transaction: {
-      to: SOUL_CONTRACT_ADDRESS,
-      data,
-    },
+  // getSmartAccount requires owner — retrieve it first
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const smart = await cdp.evm.getSmartAccount({ address: smartAccountAddress } as any);
+
+  const result = await smart.sendUserOperation({
     network: 'base',
+    calls: [{ to: SOUL_CONTRACT_ADDRESS, data, value: BigInt(0) }],
   });
 
-  return tx.transactionHash;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const final: any = await smart.waitForUserOperation({
+    userOpHash: result.userOpHash,
+  });
+
+  return final.transactionHash || '';
 }
 
 /**
