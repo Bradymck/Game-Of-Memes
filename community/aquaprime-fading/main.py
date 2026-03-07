@@ -1,5 +1,3 @@
-import json
-import os
 import requests
 from src.agent.capability import MatchingCapability
 from src.main import AgentWorker
@@ -17,7 +15,8 @@ from src.agent.capability_worker import CapabilityWorker
 # Pattern: Register → Start Game → Loop (Listen → Action/Explore) → End Game
 # =============================================================================
 
-API_BASE = "https://gameofmemes.vercel.app"
+API_BASE = "https://game-of-memes.vercel.app"
+API_SECRET = "A6eDsHmKB6ZSCPMuY9/b5sli1xsf3LFcgYiJ9imdcs4="
 
 EXIT_WORDS = {"stop", "exit", "quit", "done", "cancel", "bye", "goodbye", "leave", "end game"}
 DIRECTION_WORDS = {
@@ -62,13 +61,12 @@ class AquaPrimeFadingCapability(MatchingCapability):
 
     @classmethod
     def register_capability(cls) -> "MatchingCapability":
-        with open(
-            os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
-        ) as file:
-            data = json.load(file)
         return cls(
-            unique_name=data["unique_name"],
-            matching_hotwords=data["matching_hotwords"],
+            unique_name="aquaprime_the_fading",
+            matching_hotwords=[
+                "play aquaprime", "play the fading", "start aquaprime",
+                "aquaprime game", "play a game", "voice rpg", "airship game",
+            ],
         )
 
     def call(self, worker: AgentWorker):
@@ -82,7 +80,10 @@ class AquaPrimeFadingCapability(MatchingCapability):
             resp = requests.post(
                 f"{API_BASE}/api/voice{path}",
                 json=body,
-                headers={"Content-Type": "application/json"},
+                headers={
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {API_SECRET}",
+                },
                 timeout=30,
             )
             if resp.status_code == 200:
@@ -101,7 +102,10 @@ class AquaPrimeFadingCapability(MatchingCapability):
             resp = requests.get(
                 f"{API_BASE}/api/voice{path}",
                 params=params,
-                headers={"Content-Type": "application/json"},
+                headers={
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {API_SECRET}",
+                },
                 timeout=15,
             )
             if resp.status_code == 200:
