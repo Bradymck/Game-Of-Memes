@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
     // Load session
     const { data: session } = await supabaseAdmin
       .from('voice_game_sessions')
-      .select('*, voice_players!inner(id, cdp_wallet_address, device_id, speaker_id)')
+      .select('*, voice_players!inner(id, cdp_wallet_address, cdp_account_id, device_id, speaker_id)')
       .eq('id', body.sessionId)
       .eq('status', 'active')
       .single();
@@ -60,6 +60,7 @@ export async function POST(req: NextRequest) {
         if (chainAction.type === 'record_win' || chainAction.type === 'record_loss') {
           txHash = await recordGameResult(
             player.cdp_wallet_address,
+            player.cdp_account_id,
             chainAction.type === 'record_win',
           );
         }

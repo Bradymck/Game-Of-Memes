@@ -93,10 +93,12 @@ export async function createPlayerWallet(): Promise<{
 
 /**
  * Record a game result on the Soul Token contract via sponsored UserOperation.
- * Uses the player's smart account for gas-free execution.
+ * Requires both the smart account address and the owner EOA address to reconstruct
+ * the signing context.
  */
 export async function recordGameResult(
   smartAccountAddress: string,
+  ownerAddress: string,
   won: boolean,
 ): Promise<string> {
   const cdp = getCdpClient();
@@ -107,9 +109,11 @@ export async function recordGameResult(
     functionName: fnName,
   });
 
-  // getSmartAccount requires owner — retrieve it first
+  // Reconstruct owner account, then get smart account with owner context
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const smart = await cdp.evm.getSmartAccount({ address: smartAccountAddress } as any);
+  const owner = await cdp.evm.getAccount({ address: ownerAddress } as any);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const smart = await cdp.evm.getSmartAccount({ address: smartAccountAddress, owner: owner } as any);
 
   const result = await smart.sendUserOperation({
     network: 'base',

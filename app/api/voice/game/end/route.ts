@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
     // Load session
     const { data: session } = await supabaseAdmin
       .from('voice_game_sessions')
-      .select('*, voice_players!inner(id, cdp_wallet_address, device_id, total_games)')
+      .select('*, voice_players!inner(id, cdp_wallet_address, cdp_account_id, device_id, total_games)')
       .eq('id', body.sessionId)
       .eq('status', 'active')
       .single();
@@ -49,6 +49,7 @@ export async function POST(req: NextRequest) {
     try {
       txHash = await recordGameResult(
         session.voice_players.cdp_wallet_address,
+        session.voice_players.cdp_account_id,
         survived,
       );
     } catch (err) {
