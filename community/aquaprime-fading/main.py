@@ -9,16 +9,15 @@ from src.agent.capability_worker import CapabilityWorker
 # AquaPrime: The Fading — On-Chain Voice RPG
 #
 # A voice-controlled RPG where players explore a floating world of meme factions
-# aboard city-sized airships. Actions are recorded on Base via CDP agent wallets.
+# aboard city-sized airships. Actions are recorded on Base via CDP embedded wallets.
+#
+# Identity: deviceId → embedded CDP wallet (created on first play)
+# One device = one player. Wallet address = player identity in Supabase.
 #
 # Pattern: Register → Start Game → Loop (Listen → Action/Explore) → End Game
-#
-# Requires AQUAPRIME_API_URL and AQUAPRIME_API_KEY env vars on the device,
-# pointing to the deployed Game_Of_Memes Vercel API.
 # =============================================================================
 
-API_BASE = os.environ.get("AQUAPRIME_API_URL", "https://gameofmemes.vercel.app")
-API_KEY = os.environ.get("AQUAPRIME_API_KEY", "")
+API_BASE = "https://gameofmemes.vercel.app"
 
 EXIT_WORDS = {"stop", "exit", "quit", "done", "cancel", "bye", "goodbye", "leave", "end game"}
 DIRECTION_WORDS = {
@@ -29,15 +28,7 @@ DIRECTION_WORDS = {
 }
 
 
-def api_headers():
-    return {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {API_KEY}",
-    }
-
-
 def detect_direction(text: str):
-    """Check if the user wants to move/explore in a direction."""
     lower = text.lower()
     move_prefixes = ["go ", "move ", "sail ", "fly ", "head ", "travel ", "explore "]
     for prefix in move_prefixes:
@@ -53,7 +44,6 @@ def detect_direction(text: str):
 
 
 def detect_stats_request(text: str) -> bool:
-    """Check if the user is asking for their stats."""
     lower = text.lower()
     return any(kw in lower for kw in [
         "stats", "status", "score", "how am i doing",
@@ -66,9 +56,9 @@ class AquaPrimeFadingCapability(MatchingCapability):
     worker: AgentWorker = None
     capability_worker: CapabilityWorker = None
     device_id: str = ""
-    speaker_id: str = "default"
     session_id: str = ""
     player_name: str = ""
+    wallet_address: str = ""
 
     @classmethod
     def register_capability(cls) -> "MatchingCapability":
@@ -85,16 +75,14 @@ class AquaPrimeFadingCapability(MatchingCapability):
         self.worker = worker
         self.capability_worker = CapabilityWorker(self.worker)
         self.device_id = getattr(self.worker, "device_id", "unknown-device")
-        self.speaker_id = getattr(self.worker, "speaker_id", "default")
         self.worker.session_tasks.create(self.run())
 
     def api_post(self, path: str, body: dict) -> dict | None:
-        """Make a POST request to the voice API."""
         try:
             resp = requests.post(
                 f"{API_BASE}/api/voice{path}",
                 json=body,
-                headers=api_headers(),
+                headers={"Content-Type": "application/json"},
                 timeout=30,
             )
             if resp.status_code == 200:
@@ -109,12 +97,11 @@ class AquaPrimeFadingCapability(MatchingCapability):
             return None
 
     def api_get(self, path: str, params: dict) -> dict | None:
-        """Make a GET request to the voice API."""
         try:
             resp = requests.get(
                 f"{API_BASE}/api/voice{path}",
                 params=params,
-                headers=api_headers(),
+                headers={"Content-Type": "application/json"},
                 timeout=15,
             )
             if resp.status_code == 200:
@@ -126,7 +113,6 @@ class AquaPrimeFadingCapability(MatchingCapability):
             return None
 
     async def narrate(self, context: str, player_action: str = "") -> str:
-        """Use the device LLM to generate immersive narration from game context."""
         prompt = (
             "You are the narrator of AquaPrime: The Fading, a voice RPG set in a "
             "floating world of meme factions and city-sized airships. "
@@ -140,22 +126,11 @@ class AquaPrimeFadingCapability(MatchingCapability):
         return self.capability_worker.text_to_text_response(prompt)
 
     async def run(self):
-        if not API_KEY:
-            await self.capability_worker.speak(
-                "AquaPrime is not configured. The API key is missing. "
-                "Please set AQUAPRIME_API_KEY in the device settings."
-            )
-            self.capability_worker.resume_normal_flow()
-            return
-
-        # --- Step 1: Register / retrieve player ---
+        # --- Register: creates embedded CDP wallet on first play ---
         await self.capability_worker.speak(
-            "Welcome to AquaPrime: The Fading. Connecting to the blockchain..."
+            "Welcome to AquaPrime: The Fading. Forging your soul on the blockchain..."
         )
-        reg = self.api_post("/register", {
-            "deviceId": self.device_id,
-            "speakerId": self.speaker_id,
-        })
+        reg = self.api_post("/register", {"deviceId": self.device_id})
         if not reg:
             await self.capability_worker.speak(
                 "I couldn't connect to the AquaPrime server. Please try again later."
@@ -163,6 +138,7 @@ class AquaPrimeFadingCapability(MatchingCapability):
             self.capability_worker.resume_normal_flow()
             return
 
+        self.wallet_address = reg.get("walletAddress", "")
         self.player_name = reg.get("displayName") or "Captain"
         is_new = reg.get("isNew", False)
         moonstones = reg.get("moonstones", 0)
@@ -170,10 +146,9 @@ class AquaPrimeFadingCapability(MatchingCapability):
 
         if is_new:
             await self.capability_worker.speak(
-                f"A new soul emerges. Your wallet has been forged on the Base blockchain. "
-                f"Welcome aboard, {self.player_name}."
+                "A new soul emerges. Your wallet has been forged on the Base blockchain. "
+                "Welcome aboard, Captain."
             )
-            # Ask for a name
             await self.capability_worker.speak("What shall we call you, Captain?")
             name_input = await self.capability_worker.user_response()
             if name_input and name_input.strip():
@@ -184,12 +159,9 @@ class AquaPrimeFadingCapability(MatchingCapability):
                 f"You have {moonstones} moonstones and {sand_dollars} sand dollars."
             )
 
-        # --- Step 2: Start game session ---
+        # --- Start game session ---
         await self.capability_worker.speak("Launching your airship. Stand by...")
-        start = self.api_post("/game/start", {
-            "deviceId": self.device_id,
-            "speakerId": self.speaker_id,
-        })
+        start = self.api_post("/game/start", {"deviceId": self.device_id})
         if not start:
             await self.capability_worker.speak(
                 "Failed to launch the airship. The winds are too strong. Try again later."
@@ -198,30 +170,25 @@ class AquaPrimeFadingCapability(MatchingCapability):
             return
 
         self.session_id = start["sessionId"]
-        narrative = start.get("narrative", "")
 
-        # Narrate the opening with LLM flair
-        opening = await self.narrate(start.get("openingContext", narrative))
+        opening = await self.narrate(start.get("openingContext", start.get("narrative", "")))
         await self.capability_worker.speak(opening)
         await self.capability_worker.speak("What do you do?")
 
-        # --- Step 3: Game loop ---
+        # --- Game loop ---
         while True:
             user_input = await self.capability_worker.user_response()
             if not user_input:
                 continue
 
-            # Check for exit
             if any(word in user_input.lower() for word in EXIT_WORDS):
                 await self.end_game()
                 break
 
-            # Check for stats request
             if detect_stats_request(user_input):
                 await self.speak_stats()
                 continue
 
-            # Check for directional movement
             direction = detect_direction(user_input)
             if direction:
                 game_over = await self.do_explore(direction)
@@ -236,10 +203,8 @@ class AquaPrimeFadingCapability(MatchingCapability):
         self.capability_worker.resume_normal_flow()
 
     async def do_action(self, action: str) -> bool:
-        """Process a game action (attack, search, talk, etc.)."""
         result = self.api_post("/game/action", {
             "deviceId": self.device_id,
-            "speakerId": self.speaker_id,
             "sessionId": self.session_id,
             "action": action,
         })
@@ -249,7 +214,6 @@ class AquaPrimeFadingCapability(MatchingCapability):
             )
             return False
 
-        # Use LLM to narrate the game mechanics
         narration = await self.narrate(
             result.get("narrationContext", result.get("narrative", "")),
             action,
@@ -259,14 +223,11 @@ class AquaPrimeFadingCapability(MatchingCapability):
         if result.get("gameOver"):
             await self.end_game()
             return True
-
         return False
 
     async def do_explore(self, direction: str) -> bool:
-        """Move the airship in a direction."""
         result = self.api_post("/game/explore", {
             "deviceId": self.device_id,
-            "speakerId": self.speaker_id,
             "sessionId": self.session_id,
             "direction": direction,
         })
@@ -276,8 +237,6 @@ class AquaPrimeFadingCapability(MatchingCapability):
             )
             return False
 
-        # Build narration context
-        gs = result.get("gameState", {})
         encounter = result.get("encounter")
         context = result.get("narrative", "")
         if encounter:
@@ -288,11 +247,7 @@ class AquaPrimeFadingCapability(MatchingCapability):
         return False
 
     async def speak_stats(self):
-        """Read out the player's current stats."""
-        stats = self.api_get("/player/stats", {
-            "deviceId": self.device_id,
-            "speakerId": self.speaker_id,
-        })
+        stats = self.api_get("/player/stats", {"deviceId": self.device_id})
         if not stats:
             await self.capability_worker.speak("I couldn't retrieve your stats right now.")
             return
@@ -317,11 +272,9 @@ class AquaPrimeFadingCapability(MatchingCapability):
         )
 
     async def end_game(self):
-        """End the current game session and report results."""
         await self.capability_worker.speak("Docking the airship...")
         result = self.api_post("/game/end", {
             "deviceId": self.device_id,
-            "speakerId": self.speaker_id,
             "sessionId": self.session_id,
         })
         if not result:
@@ -336,7 +289,6 @@ class AquaPrimeFadingCapability(MatchingCapability):
         moonstones = stats.get("moonstones", 0)
         sand_dollars = stats.get("sandDollars", 0)
 
-        # Use LLM for a dramatic ending
         context = (
             f"The expedition ends. Result: {outcome}. "
             f"Survived {turns} turns. Earned {moonstones} moonstones and {sand_dollars} sand dollars. "
